@@ -1,0 +1,1321 @@
+---
+title: "Final Project"
+output: html_document
+author: Kaiwen Yang
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# Introduction
+```
+# 1. Read Data
+- Crime
+```{r echo = FALSE, message=FALSE}
+# Load required libraries
+library(dplyr)
+
+# URLs for the datasets
+urls <- c(
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Auto_Theft_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Bicycle_Thefts_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Break_and_Enter_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Homicides_Open_Data_(ASR-RC-TBL-002).csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Robbery_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Shooting_and_Firearm_Discharges_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Theft_Over_Open_Data.csv"
+)
+
+# Function to read and preprocess data
+read_and_process <- function(url) {
+  data <- read.csv(url)
+  return(data)
+}
+
+# Read and preprocess all datasets
+datasets <- lapply(urls, read_and_process)
+
+# Combine datasets into one
+crime <- bind_rows(datasets, .id = "Dataset")
+```
+```{r}
+head(crime)
+```
+
+- Census
+```{r}
+# Install and load the readxl package
+# install.packages("readxl")
+library(readxl)
+
+# URL of the Excel file on GitHub
+github_url <- "https://github.com/KaiwenYangUT/Robbery_Crime_Classification/raw/main/data/Income_Dataset.xlsx"
+
+# File destination on your local machine
+local_file <- "Income_Dataset.xlsx"
+
+# Download the file from GitHub
+download.file(github_url, local_file, mode = "wb")
+
+# Read the Excel file
+income <- read_excel(local_file)
+
+# Clean up: Delete the downloaded file from your local directory
+# file.remove(local_file)
+```
+
+
+# 2. Clean & Wrangle
+- Crime Data
+```{r echo=FALSE}
+# - Create a indicator variable Robbery
+crime <- crime %>%
+  mutate(Robbery = MCI_CATEGORY == "Robbery")
+
+
+# - Transform OCC_MONTH into int
+# Create new column OCC_Month_Numeric that transform chr OCC_MONTH into int.
+crime$OCC_Month_Numeric <- match(crime$OCC_MONTH, month.name)
+
+
+# - Create a new column Occurence_Time with the transformation of OCC_YEAR, OCC_MONTH, OCC_DAY and OCC_HOUR.
+crime$Occurrence_Time <- as.POSIXct(paste(crime$OCC_YEAR, crime$OCC_Month_Numeric, crime$OCC_DAY, crime$OCC_HOUR, sep="-"), format="%Y-%m-%d-%H")
+
+
+# - Convert Day of the Week to numeric representation
+crime$Day_Of_Week_Numeric <- match(weekdays(crime$Occurrence_Time), c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+
+# - Keep only necessary columns and rename them
+crime <- crime[, c("MCI_CATEGORY", "Robbery", "Occurrence_Time","OCC_YEAR", "OCC_Month_Numeric", "Day_Of_Week_Numeric", "OCC_HOUR", "NEIGHBOURHOOD_158", "LOCATION_TYPE", "PREMISES_TYPE", "LONG_WGS84", "LAT_WGS84")]
+colnames(crime) <- c("Crime_Category","Robbery", "Occurrence_Time", "Year", "Month", "Day_Of_Week_Numeric", "Hour", "Neighbourhood", "Location_Type", "Premises_Type", "Longitude", "Latitude")
+
+
+# - Create a new variable Season by grouping the month
+# Create Variable Season and Summary
+get_season <- function(month) {
+  if (month %in% c(3, 4, 5)) {
+    return("Spring")
+  } else if (month %in% c(6, 7, 8)) {
+    return("Summer")
+  } else if (month %in% c(9, 10, 11)) {
+    return("Fall")
+  } else {
+    return("Winter")
+  }
+}
+
+
+# Add a new column for season based on Month
+crime$Season <- sapply(crime$Month, get_season)
+
+
+# Define average sunset and sunrise times in Toronto (example times)
+average_sunset_time <- 18
+average_sunrise_time <- 6
+
+
+# Create the indicator variable
+crime$Darkness <- ifelse(crime$Hour >= average_sunset_time | crime$Hour < average_sunrise_time, 1, 0)
+
+
+# - Create new dataset crime_2020 by filtering crime happened in the year of 2020
+crime_2020 <- subset(crime, Year == 2020)
+
+
+# - Cleaning the dataset first by removing crime with non-recorded neighbourhood
+crime_2020 <- subset(crime_2020, Neighbourhood != "NSA")
+```
+
+- Census Data
+```{r echo=FALSE, message=FALSE}
+# - Select necessary columns related to Income such as "Average total income in 2020 among recipients" and "Average after-tax income in 2020 among recipients". I also keep the column of "Neighbourhood Name" for the purpose of future possible merge with the crime dataset.
+
+income_2020 <- income[, c("Neighbourhood Name",
+                          
+                        "Median total income in 2020  among recipients ($)",
+                        "Average total income in 2020 among recipients ($)", 
+                        
+                        "Number of persons in private households", 
+                        
+                        "One-census-family households without additional persons",
+                        "Couple-family households",
+                        "One-parent-family households",
+                        "Multigenerational households",
+                        "Multiple-census-family households",
+                        "One-census-family households with additional persons",
+                        "Two-or-more-person non-census-family households",
+                        "Median total income of two-or-more-person households in 2020 ($)",
+                        "Average total income of two-or-more-person households in 2020 ($)",
+
+                        "One-person households",
+                        "Median total income of one-person households in 2020 ($)",
+                        "Average total income of one-person households in 2020 ($)",
+                        
+                        "Average household size",
+                        "Median total income of household in 2020 ($)",
+                        "Average total income of household in 2020 ($)",
+                        
+                        "Total - Private households by tenure - 25% sample data",
+                        "Owner",
+                        "Renter",
+                        
+                        "Total - Labour force aged 15 years and over by class of worker including job permanency - 25% sample data",
+                        "Permanent position",
+                        "48-49 Transportation and warehousing",
+                        "62 Health care and social assistance")]
+```
+```{r}
+colnames(income_2020) <- c("Neighbourhood", 
+                           
+                           "Individual_Median_Income", 
+                           "Individual_Average_Income",
+                           
+                           "Population",
+                           
+                           "One-census-family households without additional persons",
+                           "Couple-family households",
+                           "One-parent-family households",
+                           "Multigenerational households",
+                           "Multiple-census-family households",
+                           "One-census-family households with additional persons",
+                           "Two-or-more-person non-census-family households",
+                           "One+_people_Household_Median_Income",
+                           "One+_people_Household_Average_Income",
+                           
+                           "Number_of_One_person_Households",
+                           "One_Person_Household_Median_Income",
+                           "One_Person_Household_Average_Income",
+
+                           
+                           "Average_Household_Size",
+                           "Household_Median_Income",
+                           "Household_Average_Income",
+                           
+                           "Number_of_Private_Household_by_Tenure",
+                           "Number_of_Owner",
+                           "Number_of_Rental_Properties",
+                           
+                           "Total_Labour_Force",
+                           "Permanent_Job_Position",
+                           "Transportation_Services_Position", 
+                           "Healthcare_Services_Position")
+```
+
+```{r}
+# Create the new column
+income_2020$Number_of_One_plus_people_Household_Median_Income <- rowSums(income_2020[, c(
+  "Multiple-census-family households", 
+  "One-census-family households without additional persons",
+  "Couple-family households",
+  "One-parent-family households",
+  "Multigenerational households",
+  "One-census-family households with additional persons",
+  "Two-or-more-person non-census-family households"
+)], na.rm = TRUE)
+
+# ratio of permanent job positions / total labour force
+income_2020$Permanent_Job_and_Labour_Force_Ratio <- 
+  income_2020$Permanent_Job_Position / income_2020$Total_Labour_Force
+
+# ratio of number of transportation service workers / number of population
+income_2020$Transportation_Service_Worker_and_Population_Ratio <-
+  income_2020$Transportation_Services_Position / income_2020$Population
+
+# ratio of number of health care service workers / number of population
+income_2020$HealthCare_Service_Worker_and_Population_Ratio <- 
+  income_2020$Healthcare_Services_Position / income_2020$Population
+
+# Difference in individuals' median and average income
+income_2020$Difference_in_Individual_Median_Average_Income <- abs(income_2020$Individual_Average_Income - income_2020$Individual_Median_Income)
+```
+
+```{r}
+# Remove the original columns
+income_2020 <- income_2020[, !names(income_2020) %in% c(
+  "Multiple-census-family households",
+  "One-census-family households without additional persons",
+  "Couple-family households",
+  "One-parent-family households",
+  "Multigenerational households",
+  "One-census-family households with additional persons",
+  "Two-or-more-person non-census-family households"
+)]
+```
+
+```{r}
+#- Check for difference in the stored Neighbourhood value for each dataset and found there are 7 neighbourhood values stored expressive differently. An classical example would be that storing "Taylor Massey" instead of "Taylor-Massey".
+
+# Extract the neighborhood columns from each dataset
+neighborhood_crime <- crime_2020$Neighbourhood
+neighborhood_income <- income_2020$Neighbourhood
+
+# Find the differences
+difference_crime_to_income <- setdiff(neighborhood_crime, neighborhood_income)
+difference_income_to_crime <- setdiff(neighborhood_income, neighborhood_crime)
+
+# Output the differences
+# print("Neighborhoods in crime dataset not present in income dataset:")
+# print(difference_crime_to_income)
+
+# print("Neighborhoods in income dataset not present in crime dataset:")
+# print(difference_income_to_crime)
+
+# Replace the values
+income_2020$Neighbourhood <- gsub("O`Connor Parkview", "O'Connor-Parkview", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Danforth-East York", "Danforth East York", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Taylor Massey", "Taylor-Massey", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("East End Danforth", "East End-Danforth", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Cabbagetown-South St. James Town", "Cabbagetown-South St.James Town", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("North St. James Town", "North St.James Town", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Yonge-St. Clair", "Yonge-St.Clair", income_2020$Neighbourhood)
+income2020 <- na.omit(income_2020)
+```
+
+- Merge Data
+```{r}
+income2020 <- na.omit(income_2020)
+crime_2020 <- na.omit(crime_2020)
+merged_data <- merge(crime_2020, income_2020, by = "Neighbourhood", all.x = TRUE)
+nrow(merged_data)
+```
+
+# Method
+- Continuous Numerical Variable Summary Table
+```{r}
+library(knitr)
+# Summary statistics for numerical variables
+numerical_summary <- summary(merged_data[, c("Longitude", "Latitude", 
+                                             "Population", "Average_Household_Size", "Number_of_Rental_Properties",
+                                             "Permanent_Job_and_Labour_Force_Ratio", 
+                                             "Transportation_Service_Worker_and_Population_Ratio", 
+                                             "HealthCare_Service_Worker_and_Population_Ratio", 
+                                             "Difference_in_Individual_Median_Average_Income")])
+
+# Define custom column names
+custom_column_names <- c("Longitude", "Latitude", 
+                         "Population", "Average Household Size", "Number of Rental Properties",
+                         "Permanent Job and Labour Force Ratio", 
+                         "Transportation Service Worker and Population Ratio", 
+                         "HealthCare Service Worker and Population Ratio", 
+                         "Difference in Individual Median Average Income")
+
+# Rename the columns of the summary table
+colnames(numerical_summary) <- custom_column_names
+
+# Load the kableExtra package
+library(kableExtra)
+
+# Print transposed summary table with custom column names and lines between rows and columns
+kable(t(numerical_summary), caption = "Summary statistics for numerical variables") %>%
+  kable_styling(latex_options = c("striped", "hold_position"),
+                full_width = TRUE)
+```
+
+Discrete Numerical Variable and Categorical Variable Summary Plots
+```{r}
+# install.packages("ggplot2")
+# install.packages("gridExtra")
+# install.packages("patchwork")
+library(ggplot2)
+library(gridExtra)
+library(patchwork)
+
+```
+```{r}
+p0 <- ggplot(merged_data, aes(x = Season)) + 
+  geom_bar() +
+  theme_minimal() +
+  labs(x = "Season") +
+  coord_flip() +
+  scale_y_continuous(breaks = seq(0, 6000, by = 2000))
+
+p1 <- ggplot(merged_data, aes(x = Month)) + 
+  geom_bar() +
+  theme_minimal() +
+  labs(x = "Month") +
+  coord_flip()
+
+p2 <- ggplot(merged_data, aes(x = Day_Of_Week_Numeric)) + 
+  geom_bar() +
+  theme_minimal() +
+  labs(x = "Day of Week") +
+  coord_flip()
+
+p3 <- ggplot(merged_data, aes(x = Hour)) + 
+  geom_bar() +
+  theme_minimal() +
+  labs(x = "Hour") +
+  coord_flip()
+
+
+grid.arrange(p0, p1, p2, p3, nrow = 1, top = "Bar Plots for Discrete Numerical and Categorical Variables")
+
+```
+
+
+- Final Data: exclude Neighbourhood
+```{r}
+# Assuming merged_data is your dataframe
+
+merged_data <- merged_data[, c("Neighbourhood", "Robbery", "Month", "Day_Of_Week_Numeric", "Hour",
+                               "Premises_Type", "Longitude", "Latitude", "Season", "Darkness",
+                               "Individual_Median_Income", "Individual_Average_Income", "Population",
+                               "Average_Household_Size", "Number_of_Rental_Properties",
+                               "Permanent_Job_and_Labour_Force_Ratio", 
+                               "Transportation_Service_Worker_and_Population_Ratio",
+                               "HealthCare_Service_Worker_and_Population_Ratio",
+                               "Difference_in_Individual_Median_Average_Income"
+)]
+  
+final_data <- subset(merged_data, select = -Neighbourhood)
+
+```
+```{r}
+colnames(final_data)
+```
+
+
+# 3. Modelling
+- Train/Test Split
+```{r}
+# Split data into training and testing sets
+set.seed(123)
+train_index <- sample(nrow(final_data), 0.7 * nrow(final_data))
+train_data <- final_data[train_index, ]
+test_data <- final_data[-train_index, ]
+
+train_data$Robbery <-as.factor(train_data$Robbery)
+test_data$Robbery <-as.factor(test_data$Robbery)
+
+nrow(train_data)
+nrow(test_data)
+
+```
+
+# - GLM
+```{r}
+glm_model <- glm(Robbery ~ ., family = binomial(link = "logit"), data = train_data)
+```
+
+```{r}
+# Predicting on train data
+glm_train_predictions <- predict(glm_model, newdata = train_data, type = "response")
+
+# Converting probabilities to binary predictions
+glm_train_predictions_binary <- ifelse(glm_train_predictions > 0.5, 1, 0)
+
+# Train Confusion Matrix
+glm_conf_matrix_train <- table(Actual = train_data$Robbery, Predicted = glm_train_predictions_binary)
+
+# Train Accuracy
+glm_train_accuracy <- sum(diag(glm_conf_matrix_train)) / sum(glm_conf_matrix_train)
+print(paste("Train Accuracy:", glm_train_accuracy))
+
+```
+
+```{r}
+# Predicting on test data
+glm_test_predictions <- predict(glm_model, newdata = test_data, type = "response")
+
+# Converting probabilities to binary predictions
+glm_test_predictions_binary <- ifelse(glm_test_predictions > 0.5, 1, 0)
+
+# Confusion Matrix
+test_glm_conf_matrix <- table(Actual = test_data$Robbery, Predicted = glm_test_predictions_binary)
+print(test_glm_conf_matrix)
+
+# Accuracy
+glm_test_accuracy <- sum(diag(test_glm_conf_matrix)) / sum(test_glm_conf_matrix)
+print(paste("Accuracy:", glm_test_accuracy))
+
+# Precision
+glm_precision <- test_glm_conf_matrix[2, 2] / sum(test_glm_conf_matrix[, 2])
+print(paste("Precision:", glm_precision))
+
+# Recall (Sensitivity)
+glm_recall <- test_glm_conf_matrix[2, 2] / sum(test_glm_conf_matrix[2, ])
+print(paste("Recall (Sensitivity):", glm_recall))
+
+# F1 Score
+glm_f1_score <- 2 * (glm_precision * glm_recall) / (glm_precision + glm_recall)
+print(paste("F1 Score:", glm_f1_score))
+
+# ROC curve
+library(pROC)
+roc_obj <- roc(test_data$Robbery, glm_test_predictions)
+plot(roc_obj, main = "ROC Curve", col = "blue")
+```
+
+# - Classification Tree
+```{r}
+library(rpart)
+library(rpart.plot)
+
+set.seed(1231)
+robbery_tree <- rpart(
+  Robbery ~ .,
+  train_data,
+  method = "class",
+  minsplit = 150,
+  minbucket = 5,
+  cp = 0,
+  xval = 10
+)
+
+# Plot the tree
+rpart.plot(robbery_tree)
+
+# Plot the complexity parameter table
+plotcp(robbery_tree)
+
+# Find the optimal cp
+optimalcp <- robbery_tree$cptable %>%
+  as.data.frame() %>%
+  slice_min(order_by = xerror, n = 1) %>%
+  head(1) %>%
+  pull(CP)
+optimalcp
+
+# Prune the tree
+robbery_tree_prune <- prune(robbery_tree, cp = optimalcp)
+rpart.plot(robbery_tree_prune)
+```
+
+```{r}
+# Predicting on train data
+tree_train_predictions <- predict(robbery_tree_prune, newdata = train_data, type = "class")
+
+# Train Confusion Matrix
+tree_conf_matrix_train <- table(Actual = train_data$Robbery, Predicted = tree_train_predictions)
+
+# Train Accuracy
+tree_train_accuracy <- sum(diag(tree_conf_matrix_train)) / sum(tree_conf_matrix_train)
+print(paste("Train Accuracy:", tree_train_accuracy))
+```
+
+```{r}
+# Predicting on test data
+test_predictions_tree <- predict(robbery_tree_prune, newdata = test_data, type = "class")
+
+# Confusion Matrix
+test_conf_matrix_tree <- table(Actual = test_data$Robbery, Predicted = test_predictions_tree)
+print(test_conf_matrix_tree)
+
+# Accuracy
+test_accuracy_tree <- sum(diag(test_conf_matrix_tree)) / sum(test_conf_matrix_tree)
+print(paste("Accuracy:", test_conf_matrix_tree))
+
+# Precision
+precision_tree <- test_conf_matrix_tree[2, 2] / sum(test_conf_matrix_tree[, 2])
+print(paste("Precision:", precision_tree))
+
+# Recall (Sensitivity)
+recall_tree <- test_conf_matrix_tree[2, 2] / sum(test_conf_matrix_tree[2, ])
+print(paste("Recall (Sensitivity):", recall_tree))
+
+# F1 Score
+f1_score_tree <- 2 * (precision_tree * recall_tree) / (precision_tree + recall_tree)
+print(paste("F1 Score:", f1_score_tree))
+
+# ROC curve (Decision trees don't output probabilities, so ROC curve isn't applicable)
+```
+
+# - Bagging
+```{r}
+train_data_bag <- train_data
+test_data_bag <- test_data 
+
+train_data_bag$Robbery <-as.factor(train_data_bag$Robbery)
+test_data_bag$Robbery <-as.factor(test_data_bag$Robbery)
+
+```
+
+```{r}
+library(randomForest)
+
+# Fit the Bagging model
+robbery_bag <- randomForest(
+  Robbery ~ .,
+  data = train_data_bag,
+  mtry = ncol(train_data_bag) - 1,
+  na.action = na.omit
+)
+
+# Variable Importance Plot
+varImpPlot(robbery_bag)
+```
+
+```{r}
+# Predicting on test data using type "response" to get predicted classes
+train_predictions_bag <- predict(robbery_bag, newdata = train_data_bag, type = "response")
+
+# Creating a confusion matrix
+train_conf_matrix_bag <- table(Actual = train_data_bag$Robbery, Predicted = train_predictions_bag)
+
+# Calculate Accuracy
+train_accuracy_bag <- sum(diag(train_conf_matrix_bag)) / sum(train_conf_matrix_bag)
+cat("Train Accuracy:", train_accuracy_bag, "\n")
+```
+
+```{r}
+# Predicting on test data using type "response" to get predicted classes
+test_predictions_bag <- predict(robbery_bag, newdata = test_data_bag, type = "response")
+
+# Creating a confusion matrix
+test_conf_matrix_bag <- table(Actual = test_data_bag$Robbery, Predicted = test_predictions_bag)
+print("Confusion Matrix:")
+print(test_conf_matrix_bag)
+
+# Calculate Accuracy
+test_accuracy_bag <- sum(diag(test_conf_matrix_bag)) / sum(test_conf_matrix_bag)
+cat("Test Accuracy:", test_accuracy_bag, "\n")
+
+# Calculate Precision (Positive Predictive Value)
+# Precision = TP / (TP + FP)
+precision_bag <- test_conf_matrix_bag[2, 2] / sum(test_conf_matrix_bag[, 2])
+cat("Precision:", precision_bag, "\n")
+
+# Calculate Recall (Sensitivity or True Positive Rate)
+# Recall = TP / (TP + FN)
+recall_bag <- test_conf_matrix_bag[2, 2] / sum(test_conf_matrix_bag[2, ])
+cat("Recall (Sensitivity):", recall_bag, "\n")
+
+# Calculate F1 Score
+# F1 Score = 2 * (Precision * Recall) / (Precision + Recall)
+f1_score_bag <- 2 * (precision_bag * recall_bag) / (precision_bag + recall_bag)
+cat("F1 Score:", f1_score_bag, "\n")
+
+```
+
+# - Random Forest
+```{r}
+train_data_rf <- train_data
+test_data_rf <- test_data 
+
+train_data_rf$Robbery <-as.factor(train_data_rf$Robbery)
+test_data_rf$Robbery <-as.factor(test_data_rf$Robbery)
+```
+
+```{r}
+# Fit the Random Forest model
+robbery_rf <- randomForest(
+  Robbery ~ .,
+  data = train_data_rf,
+  na.action = na.omit
+)
+
+# Variable Importance Plot
+varImpPlot(robbery_rf)
+```
+```{r}
+vi <- importance(robbery_rf)[, "MeanDecreaseGini"]
+vi_sorted <- sort(vi, decreasing = TRUE)
+vi_df <- data.frame(Variable = names(vi_sorted), Importance = vi_sorted)
+
+# Create a named vector for renaming
+readable_names <- setNames(
+  c("Robbery", "Month", "Day of Week", "Hour", "Premises Type", "Longitude", 
+    "Latitude", "Season", "Darkness", "Median Individual Income", 
+    "Average Individual Income", "Population", "Average Household Size", 
+    "Number of Rental Properties", "Job and Labour Force Ratio", 
+    "Transportation Worker to Population Ratio", 
+    "Healthcare Worker to Population Ratio", 
+    "Difference in Median and Average Income"),
+  c("Robbery", "Month", "Day_Of_Week_Numeric", "Hour", "Premises_Type", 
+    "Longitude", "Latitude", "Season", "Darkness", 
+    "Individual_Median_Income", "Individual_Average_Income", "Population", 
+    "Average_Household_Size", "Number_of_Rental_Properties", 
+    "Permanent_Job_and_Labour_Force_Ratio", 
+    "Transportation_Service_Worker_and_Population_Ratio", 
+    "HealthCare_Service_Worker_and_Population_Ratio", 
+    "Difference_in_Individual_Median_Average_Income")
+)
+
+# Replace names in the data frame
+vi_df$Variable <- readable_names[vi_df$Variable]
+
+
+
+ggplot(vi_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Variable Importance", x = "Variables", y = "Importance") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+```
+
+```{r}
+# Predicting on train data
+train_predictions_rf <- predict(robbery_rf, newdata = train_data_rf)
+
+# Train Confusion Matrix
+train_conf_matrix_rf <- table(Actual = train_data_rf$Robbery, Predicted = train_predictions_rf)
+
+# Train Accuracy
+train_accuracy_rf <- sum(diag(train_conf_matrix_rf)) / sum(train_conf_matrix_rf)
+print(paste("Train Accuracy:", train_accuracy_rf))
+```
+
+```{r}
+# Predicting on test data
+test_predictions_rf <- predict(robbery_rf, newdata = test_data_rf)
+
+# Confusion Matrix
+test_conf_matrix_rf <- table(Actual = test_data_rf$Robbery, Predicted = test_predictions_rf)
+print(test_conf_matrix_rf)
+
+# Accuracy
+test_accuracy_rf <- sum(diag(test_conf_matrix_rf)) / sum(test_conf_matrix_rf)
+print(paste("Test Accuracy:", test_accuracy_rf))
+
+# Precision
+precision_rf <- test_conf_matrix_rf[2, 2] / sum(test_conf_matrix_rf[, 2])
+print(paste("Precision:", precision_rf))
+
+# Recall (Sensitivity)
+recall_rf <- test_conf_matrix_rf[2, 2] / sum(test_conf_matrix_rf[2, ])
+print(paste("Recall (Sensitivity):", recall_rf))
+
+# F1 Score
+f1_score_rf <- 2 * (precision_rf * recall_rf) / (precision_rf + recall_rf)
+print(paste("F1 Score:", f1_score_rf))
+
+# ROC curve (Random Forest typically does not output probabilities, so ROC curve isn't applicable)
+
+```
+
+# - Boosting
+```{r}
+train_data_boost <- train_data
+test_data_boost <- test_data 
+
+train_data_boost$Robbery <- as.factor(train_data_boost$Robbery)
+test_data_boost$Robbery <- as.factor(test_data_boost$Robbery)
+```
+
+```{r}
+train_data_boost$Robbery <- as.numeric(train_data_boost$Robbery) - 1
+test_data_boost$Robbery <- as.numeric(test_data_boost$Robbery) - 1
+
+train_data_boost$Premises_Type <- as.factor(train_data_boost$Premises_Type)
+train_data_boost$Season <- as.factor(train_data_boost$Season)
+
+test_data_boost$Premises_Type <- as.factor(test_data_boost$Premises_Type)
+test_data_boost$Season <- as.factor(test_data_boost$Season)
+```
+
+```{r}
+library(gbm)
+# Install and load the gbm package if you haven't already
+# install.packages("gbm")
+
+# Fit the gradient boosting model with default parameters
+gbm_default <- gbm(Robbery ~ ., 
+                    data = train_data_boost, 
+                    distribution = "bernoulli", 
+                    n.trees = 100, 
+                    interaction.depth = 1, 
+                    shrinkage = 0.1, 
+                    verbose = FALSE)
+```
+
+```{r}
+# Make predictions on the training data
+boost_train_pred <- predict(gbm_default, newdata = train_data_boost, n.trees = 100, type = "response")
+
+boost_train_pred <- as.numeric(boost_train_pred)
+# Convert predicted probabilities to binary predictions (0 or 1)
+boost_train_pred_binary <- ifelse(boost_train_pred > 0.5, 1, 0)
+
+# Compute accuracy on the training data
+boost_train_accuracy <- mean(boost_train_pred_binary == train_data_boost$Robbery)
+print(paste("Training Accuracy:", boost_train_accuracy))
+```
+
+```{r}
+# Make predictions on the test data
+boost_test_pred <- predict(gbm_default, newdata = test_data_boost, n.trees = 100, type = "response")
+
+# Convert predicted probabilities to binary predictions (0 or 1)
+boost_test_pred_binary <- ifelse(boost_test_pred > 0.5, 1, 0)
+
+
+# Calculate confusion matrix
+boost_conf_matrix <- table(Actual = test_data_boost$Robbery, Predicted = boost_test_pred_binary)
+
+boost_test_accuracy <- sum(diag(boost_conf_matrix)) / sum(boost_conf_matrix)
+print(paste("Test Accuracy:", boost_test_accuracy))
+
+# Extract TP, FP, FN
+TP <- boost_conf_matrix[2, 2] # True Positives
+FP <- boost_conf_matrix[1, 2] # False Positives
+FN <- boost_conf_matrix[2, 1] # False Negatives
+
+# Calculate precision
+boost_precision <- TP / (TP + FP)
+
+# Calculate sensitivity (recall)
+boost_sensitivity <- TP / (TP + FN)
+
+# Calculate F1-score
+boost_f1_score <- 2 * boost_precision * boost_sensitivity / (boost_precision + boost_sensitivity)
+
+# Print the results
+print(paste("Precision:", boost_precision))
+print(paste("Sensitivity:", boost_sensitivity))
+print(paste("F1-score:", boost_f1_score))
+
+```
+
+# - XGBoost
+```{r}
+train_data_xgb <- train_data
+test_data_xgb <- test_data 
+
+train_data_xgb$Robbery <- as.factor(train_data_xgb$Robbery)
+test_data_xgb$Robbery <- as.factor(test_data_xgb$Robbery)
+```
+
+```{r}
+train_data_xgb$Premises_Type <- as.factor(train_data_xgb$Premises_Type)
+train_data_xgb$Season <- as.factor(train_data_xgb$Season)
+
+test_data_xgb$Premises_Type <- as.factor(test_data_xgb$Premises_Type)
+test_data_xgb$Season <- as.factor(test_data_xgb$Season)
+```
+
+```{r warning=FALSE}
+library(caret)
+library(xgboost)
+set.seed(301)
+
+train_control <- trainControl(method = "cv", number = 10, search = "grid")
+
+tune_grid <- expand.grid(
+  max_depth = c(1, 3, 5, 7),
+  nrounds = (1:10) * 50,
+  eta = 0.5,
+  gamma = 0,
+  subsample = 1,
+  min_child_weight = 1,
+  colsample_bytree = 0.6
+)
+
+# Train Optimal eta XGBoost model
+optimal_xgb_model <- train(
+  Robbery ~ .,
+  data = train_data_xgb,
+  method = "xgbTree",
+  trControl = train_control,
+  na.action = na.omit
+)
+```
+
+```{r}
+# Make predictions on the training data
+xgb_train_pred <- predict(optimal_xgb_model, newdata = train_data_xgb)
+
+# xgb_train_pred <- as.numeric(boost_train_pred)
+
+# Convert predicted probabilities to binary predictions (0 or 1)
+# xgb_train_pred_binary <- ifelse(train_data_xgb > 0.5, 1, 0)
+
+# Compute accuracy on the training data
+xgb_train_accuracy <- mean(xgb_train_pred == train_data_xgb$Robbery)
+print(paste("Training Accuracy:", xgb_train_accuracy))
+```
+
+```{r}
+# Make predictions on the test data
+xgb_test_pred <- predict(optimal_xgb_model, test_data_xgb)
+
+# xgb_test_pred <- as.numeric(xgb_test_pred)
+
+# Convert predicted probabilities to binary predictions (0 or 1)
+# xgb_test_pred_binary <- ifelse(test_pred > 1, 1, 0)
+
+# Calculate confusion matrix
+xgb_conf_matrix <- table(Actual = test_data_xgb$Robbery, Predicted = xgb_test_pred)
+
+xgb_test_accuracy <- sum(diag(xgb_conf_matrix)) / sum(xgb_conf_matrix)
+print(paste("Accuracy:", xgb_test_accuracy))
+
+# Extract TP, FP, FN
+TP <- xgb_conf_matrix[2, 2] # True Positives
+FP <- xgb_conf_matrix[1, 2] # False Positives
+FN <- xgb_conf_matrix[2, 1] # False Negatives
+
+# Calculate precision
+xgb_precision <- TP / (TP + FP)
+
+# Calculate sensitivity (recall)
+xgb_sensitivity <- TP / (TP + FN)
+
+# Calculate F1-score
+xgb_f1_score <- 2 * xgb_precision * xgb_sensitivity / (xgb_precision + xgb_sensitivity)
+
+# Print the results
+print(paste("Precision:", xgb_precision))
+print(paste("Sensitivity:", xgb_sensitivity))
+print(paste("F1-score:", xgb_f1_score))
+```
+
+
+Summary Table of Models' Performance
+```{r}
+library(knitr)
+
+# Create a summary table
+summary_table <- data.frame(
+  Model = c("GLM", "Classification Tree", "Bagging", "Random Forest", "Boosting", "XGBoosting"),
+  Train_Accuracy = c(glm_train_accuracy, tree_train_accuracy, train_accuracy_bag, train_accuracy_rf, boost_train_accuracy, xgb_train_accuracy),
+  Test_Accuracy = c(glm_test_accuracy, test_accuracy_tree, test_accuracy_bag, test_accuracy_rf, boost_test_accuracy, xgb_test_accuracy),
+  Precision = c(glm_precision, precision_tree, precision_bag, precision_rf,boost_precision, xgb_precision),
+  Recall = c(glm_recall, recall_tree, recall_bag, recall_rf,boost_sensitivity, xgb_sensitivity),
+  F1_Score = c(glm_f1_score, f1_score_tree, f1_score_bag, f1_score_rf, boost_f1_score, xgb_f1_score)
+)
+
+# Print the summary table using kable
+kable(summary_table, align = c("l", rep("c", ncol(summary_table) - 1)), 
+      caption = "Performance Metrics of Different Models")
+
+```
+
+
+- Plots
+# First Plot:
+```{r}
+robbery_count_by_neighbourhood <- merged_data %>%
+  group_by(Neighbourhood) %>%
+  summarise(robbery_count = sum(Robbery))
+
+# Merge robbery counts back to the main dataset
+merged_data_plot1 <- merge(merged_data, robbery_count_by_neighbourhood, by = "Neighbourhood")
+merged_data_plot1$`Robbery Count` <- merged_data_plot1$robbery_count
+```
+
+```{r}
+library(plotly)
+
+# Create 3D scatterplot using Plotly with 7 custom colors in reversed order and labeled axes
+plot_ly(merged_data_plot1, 
+        x = ~Permanent_Job_and_Labour_Force_Ratio, 
+        y = ~Individual_Median_Income, 
+        z = ~`Robbery Count`,
+        color = ~`Robbery Count`,
+        colors = c('#FDE725', '#5DC863', '#21908C', '#3B528B', '#440154'),
+        cmin = min(merged_data_plot1$`Robbery Count`),
+        cmax = max(merged_data_plot1$`Robbery Count`),
+        text = ~paste("Neighbour:", Neighbourhood, 
+                      "<br>#P.J. / #L.F.:",
+                      round(Permanent_Job_and_Labour_Force_Ratio, 3), 
+                      "<br>Median Income:", Individual_Median_Income, 
+                      "<br>Robbery Count:", `Robbery Count`),
+        hoverinfo = "text",
+        type = "scatter3d",
+        mode = "markers") %>%
+  layout(title = "2020 Toronto 158 Neighbourhoods' Robbery Count vs. Socioeconomic Indicators",
+    scene = list(
+    xaxis = list(title = 'Permanent Job and Labour Force Ratio'),
+    yaxis = list(title = 'Individ. Med. Income'),
+    zaxis = list(title = 'Robbery Count')))
+
+```
+
+
+# Second Plot:
+```{r}
+# Load necessary libraries
+library(plotly)
+library(dplyr)
+
+# Make a copy of the merged_data and convert Darkness to a factor
+merged_data_plot2 <- merged_data
+merged_data_plot2$Darkness <- as.logical(merged_data_plot2$Darkness)
+```
+
+```{r}
+# Split the dataset into two based on Darkness
+dark_data <- merged_data_plot2 %>% filter(Darkness == TRUE)
+bright_data <- merged_data_plot2 %>% filter(Darkness == FALSE)
+```
+
+```{r}
+# Create a new column to calculate Robbery Counts for each premises type
+
+# Dark
+dark_robbery_count <- dark_data %>%
+  group_by(Neighbourhood) %>%
+  summarise(robbery_count = sum(Robbery))
+
+dark_data_with_count <- merge(dark_data, dark_robbery_count, by = "Neighbourhood")
+
+
+# Bright
+bright_robbery_count <- bright_data %>%
+  group_by(Neighbourhood) %>%
+  summarise(robbery_count = sum(Robbery))
+
+bright_data_with_count <- merge(bright_data, bright_robbery_count, by = "Neighbourhood")
+
+combined_data <- rbind(dark_data_with_count, bright_data_with_count)
+
+```
+
+```{r}
+# Create box plots
+plot <- plot_ly(combined_data, x = ~Darkness, y = ~robbery_count, color = ~Premises_Type, type = "box",
+                text = ~paste("Neighbourhood:", Neighbourhood)) %>%
+  layout(title = "Robbery Counts by Premises Type and Darkness",
+         xaxis = list(title = "Darkness (Presence of Sunset)"),
+         yaxis = list(title = "Robbery Counts"),
+         boxmode = "group",
+         barmode = "group",
+         facet_col = ~Premises_Type)
+
+# Display the plot
+plot
+```
+
+Ignore it when use web/report, but cool
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Create box plots faceted by premises type
+plot <- ggplot(combined_data, aes(x = Darkness, y = robbery_count)) +
+  geom_boxplot() +
+  facet_wrap(~Premises_Type, nrow = 1) +
+  labs(title = "Robbery Counts by Premises Type and Darkness",
+       x = "Darkness",
+       y = "Robbery Counts") +
+  theme_minimal()
+
+# Display the plot
+plot
+```
+
+
+# Third Plot:
+- By season
+```{r}
+# Load necessary libraries
+library(plotly)
+library(dplyr)
+
+# First, let's calculate the count of robberies for each premises type in each season
+robbery_count_by_premise_season <- merged_data %>%
+  group_by(Season, Premises_Type) %>%
+  summarise(robbery_count = sum(Robbery))
+
+# Merge robbery counts back to the main dataset
+merged_data_plot3_season <- merge(merged_data, robbery_count_by_premise_season, by = c("Season","Premises_Type"))
+merged_data_plot3_season$`Robbery Count` <- merged_data_plot3_season$robbery_count
+```
+
+```{r}
+# By season
+
+# Now, create the line plot
+plot31 <- plot_ly(merged_data_plot3_season, x = ~Season, y = ~`Robbery Count`, color = ~Premises_Type, type = 'scatter', mode = 'lines', 
+                marker = list(size = 8)) %>%
+  layout(title = "Robbery Count by Premises Type and Season",
+         xaxis = list(title = "Season"),
+         yaxis = list(title = "Robbery Count"),
+         showlegend = TRUE)
+
+# Print the plot
+print(plot31)
+```
+- By month
+```{r}
+# First, let's calculate the count of robberies for each premises type in each season
+robbery_count_by_premise_month <- merged_data %>%
+  group_by(Month, Premises_Type) %>%
+  summarise(robbery_count = sum(Robbery))
+
+robbery_count_by_premise_month$Month <- as.factor(robbery_count_by_premise_month$Month)
+
+merged_data$Month <- as.factor(merged_data$Month)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot3_month <- merge(merged_data, robbery_count_by_premise_month, by =
+                                   c("Month","Premises_Type"))
+merged_data_plot3_month$`Robbery Count` <- merged_data_plot3_month$robbery_count
+
+merged_data_plot3_month <- merged_data_plot3_month %>%
+  arrange(Month)
+
+# Now, create the line plot
+plot32 <- plot_ly(merged_data_plot3_month, x = ~Month, y = ~`Robbery Count`, color = ~Premises_Type, type
+                  = 'scatter', mode = 'lines',  marker = list(size = 8)) %>%
+  layout(title = "Robbery Count by Premises Type and Month",
+         xaxis = list(title = "Month"),
+         yaxis = list(title = "Robbery Count"),
+         showlegend = TRUE)
+
+# Print the plot
+print(plot32)
+```
+
+- By Day of Week
+```{r}
+# First, let's calculate the count of robberies for each premises type in each season
+robbery_count_by_premise_day <- merged_data %>%
+  group_by(Day_Of_Week_Numeric, Premises_Type) %>%
+  summarise(robbery_count = sum(Robbery))
+
+robbery_count_by_premise_day$Day_Of_Week_Numeric <- as.factor(robbery_count_by_premise_day$Day_Of_Week_Numeric)
+
+merged_data$Day_Of_Week_Numeric <- as.factor(merged_data$Day_Of_Week_Numeric)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot3_day <- merge(merged_data, robbery_count_by_premise_day, by =
+                                   c("Day_Of_Week_Numeric","Premises_Type"))
+merged_data_plot3_day$`Robbery Count` <- merged_data_plot3_day$robbery_count
+
+merged_data_plot3_day <- merged_data_plot3_day %>%
+  arrange(Day_Of_Week_Numeric)
+
+# Now, create the line plot
+plot33 <- plot_ly(merged_data_plot3_day, x = ~Day_Of_Week_Numeric, y = ~`Robbery Count`, color = ~Premises_Type, type
+                  = 'scatter', mode = 'lines',  marker = list(size = 8)) %>%
+  layout(title = "Robbery Count by Premises Type and Day",
+         xaxis = list(title = "Day of Week"),
+         yaxis = list(title = "Robbery Count"),
+         showlegend = TRUE)
+
+# Print the plot
+print(plot33)
+```
+
+- By Hour
+```{r}
+# First, let's calculate the count of robberies for each premises type in each season
+robbery_count_by_premise_hour <- merged_data %>%
+  group_by(Hour, Premises_Type) %>%
+  summarise(robbery_count = sum(Robbery))
+
+robbery_count_by_premise_hour$Hour <- as.factor(robbery_count_by_premise_hour$Hour)
+
+merged_data$Hour <- as.factor(merged_data$Hour)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot3_hour <- merge(merged_data, robbery_count_by_premise_hour, by =
+                                   c("Hour","Premises_Type"))
+merged_data_plot3_hour$`Robbery Count` <- merged_data_plot3_hour$robbery_count
+
+merged_data_plot3_hour <- merged_data_plot3_hour %>%
+  arrange(Hour)
+
+# Now, create the line plot
+plot34 <- plot_ly(merged_data_plot3_hour, x = ~Hour, y = ~`Robbery Count`, color = ~Premises_Type, type
+                  = 'scatter', mode = 'lines',  marker = list(size = 8)) %>%
+  layout(title = "Robbery Count by Premises Type and Hour of the Day",
+         xaxis = list(title = "Hour of the Day"),
+         yaxis = list(title = "Robbery Count"),
+         showlegend = TRUE)
+
+# Print the plot
+print(plot34)
+```
+
+
+# Fourth Plot:
+- Season
+```{r}
+# Load necessary libraries
+library(plotly)
+library(dplyr)
+
+# Group merged_data by Season and calculate the sum of Robbery and total crimes
+crime_counts_by_season <- merged_data %>%
+  group_by(Season) %>%
+  summarise(total_crime_count = n(),
+            robbery_count = sum(Robbery))
+
+crime_counts_by_season$Season <- as.factor(crime_counts_by_season$Season)
+
+merged_data$Season <- as.factor(merged_data$Season)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot4_season <- merge(merged_data, crime_counts_by_season, by = "Season")
+merged_data_plot4_season$`Robbery Count` <- merged_data_plot4_season$robbery_count
+merged_data_plot4_season$`Total Crime Count` <- merged_data_plot4_season$total_crime_count
+
+# merged_data_plot4_season <- merged_data_plot4_season %>% arrange(Season)
+
+# Create a bar plot using plotly
+plot_ly(merged_data_plot4_season, x = ~Season, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+  add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
+  layout(title = "Total Crime Counts v.s. Robbery Counts by Season",
+         xaxis = list(title = "Season"),
+         yaxis = list(title = "Count"),
+         barmode = 'overlay')
+
+```
+
+- Month
+```{r}
+# Load necessary libraries
+library(plotly)
+library(dplyr)
+
+# Group merged_data by Season and calculate the sum of Robbery and total crimes
+crime_counts_by_month <- merged_data %>%
+  group_by(Month) %>%
+  summarise(total_crime_count = n(),
+            robbery_count = sum(Robbery))
+
+crime_counts_by_month$Month <- as.factor(crime_counts_by_month$Month)
+
+merged_data$Month <- as.factor(merged_data$Month)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot4_month <- merge(merged_data, crime_counts_by_month, by = "Month")
+merged_data_plot4_month$`Robbery Count` <- merged_data_plot4_month$robbery_count
+merged_data_plot4_month$`Total Crime Count` <- merged_data_plot4_month$total_crime_count
+
+merged_data_plot4_month <- merged_data_plot4_month %>% arrange(Month)
+
+# Create a bar plot using plotly
+plot_ly(merged_data_plot4_month, x = ~Month, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+  add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
+  layout(title = "Total Crime Counts v.s. Robbery Counts by Month",
+         xaxis = list(title = "Month"),
+         yaxis = list(title = "Count"),
+         barmode = 'overlay')
+
+```
+
+- Day of Week
+```{r}
+library(plotly)
+library(dplyr)
+
+# Group merged_data by Season and calculate the sum of Robbery and total crimes
+crime_counts_by_day <- merged_data %>%
+  group_by(Day_Of_Week_Numeric) %>%
+  summarise(total_crime_count = n(),
+            robbery_count = sum(Robbery))
+
+crime_counts_by_day$Day_Of_Week_Numeric <- as.factor(crime_counts_by_day$Day_Of_Week_Numeric)
+
+merged_data$Day_Of_Week_Numeric <- as.factor(merged_data$Day_Of_Week_Numeric)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot4_day <- merge(merged_data, crime_counts_by_day, by = "Day_Of_Week_Numeric")
+merged_data_plot4_day$`Robbery Count` <- merged_data_plot4_day$robbery_count
+merged_data_plot4_day$`Total Crime Count` <- merged_data_plot4_day$total_crime_count
+
+merged_data_plot4_day <- merged_data_plot4_day %>% arrange(Day_Of_Week_Numeric)
+
+# Create a bar plot using plotly
+plot_ly(merged_data_plot4_day, x = ~Day_Of_Week_Numeric, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+  add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
+  layout(title = "Total Crime Counts v.s. Robbery Counts by Day of Week",
+         xaxis = list(title = "Day of Week"),
+         yaxis = list(title = "Count"),
+         barmode = 'overlay')
+```
+
+- Hour
+```{r}
+# Load necessary libraries
+library(plotly)
+library(dplyr)
+
+# Group merged_data by Season and calculate the sum of Robbery and total crimes
+crime_counts_by_hour <- merged_data %>%
+  group_by(Hour) %>%
+  summarise(total_crime_count = n(),
+            robbery_count = sum(Robbery))
+
+crime_counts_by_hour$Hour <- as.factor(crime_counts_by_hour$Hour)
+
+merged_data$Hour <- as.factor(merged_data$Hour)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot4_hour <- merge(merged_data, crime_counts_by_hour, by = "Hour")
+merged_data_plot4_hour$`Robbery Count` <- merged_data_plot4_hour$robbery_count
+merged_data_plot4_hour$`Total Crime Count` <- merged_data_plot4_hour$total_crime_count
+
+merged_data_plot4_hour <- merged_data_plot4_hour %>% arrange(Hour)
+
+# Create a bar plot using plotly
+plot_ly(merged_data_plot4_hour, x = ~Hour, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+  add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
+  layout(title = "Total Crime Counts v.s. Robbery Counts by Hour",
+         xaxis = list(title = "Hour"),
+         yaxis = list(title = "Count"),
+         barmode = 'overlay')
+```
+
+# Fifth Plot:
+Used Leaflet:
+```{r}
+robbery_data <- merged_data %>% filter(Robbery == TRUE)
+nrow(robbery_data)
+```
+```{r}
+# Create leaflet map
+map <- leaflet(data = robbery_data) %>%
+  addTiles() %>%
+  setView(lng = -79.4, lat = 43.7, zoom = 10) # Adjust the coordinates and zoom level as needed
+
+# Define unique colors for premises types
+premises_colors <- unique(color_palette(robbery_data$Premises_Type))
+
+# Add markers colored by premises type
+map <- map %>% 
+  addCircleMarkers(lng = ~Longitude,
+                   lat = ~Latitude,
+                   radius = 5,
+                   color = ~color_palette(Premises_Type),
+                   fillColor = ~color_palette(Premises_Type),
+                   fillOpacity = 0.8,
+                   popup = ~paste("Neighbourhood: ", Neighbourhood, "<br>",
+                                  "Premises Type: ", Premises_Type, "<br>",
+                                  "Population: ", Population)) %>%
+  # Add legend
+  addLegend(position = "bottomright",
+            colors = premises_colors,
+            labels = unique(robbery_data$Premises_Type),
+            title = "Premises Type")
+
+
+# Print the map
+map
+
+```
+
+Used Plotly:
+```{r}
+library(plotly)
+
+# Filter the data for robbery crimes
+robbery_data <- merged_data[merged_data$Robbery == TRUE, ]
+
+# Create the plot
+plot_ly(data = robbery_data, 
+        type = "scattergeo",
+        lon = ~Longitude, 
+        lat = ~Latitude, 
+        color = ~Premises_Type, 
+        colors = "Set1",
+        text = ~paste("Neighbourhood: ", Neighbourhood, "<br>",
+                      "Premises Type: ", Premises_Type, "<br>",
+                      "Population: ", Population),
+        mode = "markers") %>%
+  layout(title = "Map of Robbery Crimes",
+         geo = list(
+           showland = TRUE,
+           landcolor = "lightgrey",
+           showcountries = TRUE,
+           showcoastlines = TRUE,
+           countrycolor = "darkgrey",
+           showocean = TRUE,
+           oceancolor = "azure",
+           center = list(lon = -79.3832, lat = 43.6532), # Set the center of the map
+           projection = list(type = 'equirectangular') # Set the projection type
+         ))
