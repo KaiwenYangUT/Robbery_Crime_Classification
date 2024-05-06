@@ -4,6 +4,4 @@ output:
     html_document
 ---
 
-Available at:
-
 [Download the Report](JSC370 Final Project Report Kaiwen Yang.pdf){.btn .btn-primary}
