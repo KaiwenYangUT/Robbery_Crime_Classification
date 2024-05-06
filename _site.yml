@@ -1,0 +1,25 @@
+name: "Robbery_Crime_Classification"
+output_dir: "."
+navbar:
+  title: "JSC370 Final Project"
+  left:
+    - text: "Description"
+      href: index.html
+    - text: "Key Variable Statistics"
+      href: variable.html
+    - text: "Visualizations"
+      href: visual.html
+    - text: "Model"
+      href: model.html 
+    - text: "Acknowledgements"
+      href: acknowledgements.html      
+    - text: "Report"
+      href: report.html
+  right:
+    - icon: fa-github fa-lg
+      href: https://github.com/KaiwenYangUT/Robbery_Crime_Classification
+    - text: "JSC370 Homepage"
+      href: https://jsc370.github.io/JSC370-2024/
+output:
+  html_document:
+    theme: cosmo

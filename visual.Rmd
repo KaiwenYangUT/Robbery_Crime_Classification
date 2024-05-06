@@ -1,0 +1,652 @@
+---
+title: "Interactive Visualizations"
+output: 
+    html_document:
+        toc: TRUE
+        toc_float: TRUE
+---
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+library(dplyr)
+library(readxl)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(gridExtra)
+library(patchwork)
+library(pROC)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(gbm)
+library(caret)
+library(xgboost)
+library(plotly)
+library(leaflet)
+library(RColorBrewer)
+
+# URLs for the datasets
+urls <- c(
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Auto_Theft_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Bicycle_Thefts_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Break_and_Enter_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Homicides_Open_Data_(ASR-RC-TBL-002).csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Robbery_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Shooting_and_Firearm_Discharges_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Theft_Over_Open_Data.csv"
+)
+
+# Function to read and preprocess data
+read_and_process <- function(url) {
+  data <- read.csv(url)
+  return(data)
+} 
+
+# Read and preprocess all datasets
+datasets <- lapply(urls, read_and_process)
+
+# Combine datasets into one
+crime <- bind_rows(datasets, .id = "Dataset")
+
+# URL of the Excel file on GitHub
+github_url <- "https://github.com/KaiwenYangUT/Robbery_Crime_Classification/raw/main/data/Income_Dataset.xlsx"
+
+# File destination on your local machine
+local_file <- "Income_Dataset.xlsx"
+
+# Download the file from GitHub
+download.file(github_url, local_file, mode = "wb")
+
+# Read the Excel file
+income <- read_excel(local_file)
+
+# - Create a indicator variable Robbery
+crime <- crime %>%
+  mutate(Robbery = MCI_CATEGORY == "Robbery")
+
+
+# - Transform OCC_MONTH into int
+# Create new column OCC_Month_Numeric that transform chr OCC_MONTH into int.
+crime$OCC_Month_Numeric <- match(crime$OCC_MONTH, month.name)
+
+
+# - Create a new column Occurence_Time with the transformation of OCC_YEAR, OCC_MONTH, OCC_DAY and OCC_HOUR.
+crime$Occurrence_Time <- as.POSIXct(paste(crime$OCC_YEAR, crime$OCC_Month_Numeric, crime$OCC_DAY, crime$OCC_HOUR, sep="-"), format="%Y-%m-%d-%H")
+
+
+# - Convert Day of the Week to numeric representation
+crime$Day_Of_Week_Numeric <- match(weekdays(crime$Occurrence_Time), c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+
+# - Keep only necessary columns and rename them
+crime <- crime[, c("MCI_CATEGORY", "Robbery", "Occurrence_Time","OCC_YEAR", "OCC_Month_Numeric", "Day_Of_Week_Numeric", "OCC_HOUR", "NEIGHBOURHOOD_158", "LOCATION_TYPE", "PREMISES_TYPE", "LONG_WGS84", "LAT_WGS84")]
+colnames(crime) <- c("Crime_Category","Robbery", "Occurrence_Time", "Year", "Month", "Day_Of_Week_Numeric", "Hour", "Neighbourhood", "Location_Type", "Premises_Type", "Longitude", "Latitude")
+
+
+# - Create a new variable Season by grouping the month
+# Create Variable Season and Summary
+get_season <- function(month) {
+  if (month %in% c(3, 4, 5)) {
+    return("Spring")
+  } else if (month %in% c(6, 7, 8)) {
+    return("Summer")
+  } else if (month %in% c(9, 10, 11)) {
+    return("Fall")
+  } else {
+    return("Winter")
+  }
+}
+
+
+# Add a new column for season based on Month
+crime$Season <- sapply(crime$Month, get_season)
+
+
+# Define average sunset and sunrise times in Toronto (example times)
+average_sunset_time <- 18
+average_sunrise_time <- 6
+
+
+# Create the indicator variable
+crime$Darkness <- ifelse(crime$Hour >= average_sunset_time | crime$Hour < average_sunrise_time, 1, 0)
+
+
+# - Create new dataset crime_2020 by filtering crime happened in the year of 2020
+crime_2020 <- subset(crime, Year == 2020)
+
+
+# - Cleaning the dataset first by removing crime with non-recorded neighbourhood
+crime_2020 <- subset(crime_2020, Neighbourhood != "NSA")
+
+income_2020 <- income[, c("Neighbourhood Name",
+                          
+                        "Median total income in 2020  among recipients ($)",
+                        "Average total income in 2020 among recipients ($)", 
+                        
+                        "Number of persons in private households", 
+                        
+                        "One-census-family households without additional persons",
+                        "Couple-family households",
+                        "One-parent-family households",
+                        "Multigenerational households",
+                        "Multiple-census-family households",
+                        "One-census-family households with additional persons",
+                        "Two-or-more-person non-census-family households",
+                        "Median total income of two-or-more-person households in 2020 ($)",
+                        "Average total income of two-or-more-person households in 2020 ($)",
+
+                        "One-person households",
+                        "Median total income of one-person households in 2020 ($)",
+                        "Average total income of one-person households in 2020 ($)",
+                        
+                        "Average household size",
+                        "Median total income of household in 2020 ($)",
+                        "Average total income of household in 2020 ($)",
+                        
+                        "Total - Private households by tenure - 25% sample data",
+                        "Owner",
+                        "Renter",
+                        
+                        "Total - Labour force aged 15 years and over by class of worker including job permanency - 25% sample data",
+                        "Permanent position",
+                        "48-49 Transportation and warehousing",
+                        "62 Health care and social assistance")]
+
+colnames(income_2020) <- c("Neighbourhood", 
+                           
+                           "Individual_Median_Income", 
+                           "Individual_Average_Income",
+                           
+                           "Population",
+                           
+                           "One-census-family households without additional persons",
+                           "Couple-family households",
+                           "One-parent-family households",
+                           "Multigenerational households",
+                           "Multiple-census-family households",
+                           "One-census-family households with additional persons",
+                           "Two-or-more-person non-census-family households",
+                           "One+_people_Household_Median_Income",
+                           "One+_people_Household_Average_Income",
+                           
+                           "Number_of_One_person_Households",
+                           "One_Person_Household_Median_Income",
+                           "One_Person_Household_Average_Income",
+
+                           
+                           "Average_Household_Size",
+                           "Household_Median_Income",
+                           "Household_Average_Income",
+                           
+                           "Number_of_Private_Household_by_Tenure",
+                           "Number_of_Owner",
+                           "Number_of_Rental_Properties",
+                           
+                           "Total_Labour_Force",
+                           "Permanent_Job_Position",
+                           "Transportation_Services_Position", 
+                           "Healthcare_Services_Position")
+
+# Create the new column
+income_2020$Number_of_One_plus_people_Household_Median_Income <- rowSums(income_2020[, c(
+  "Multiple-census-family households", 
+  "One-census-family households without additional persons",
+  "Couple-family households",
+  "One-parent-family households",
+  "Multigenerational households",
+  "One-census-family households with additional persons",
+  "Two-or-more-person non-census-family households"
+)], na.rm = TRUE)
+
+# ratio of permanent job positions / total labour force
+income_2020$Permanent_Job_and_Labour_Force_Ratio <- 
+  income_2020$Permanent_Job_Position / income_2020$Total_Labour_Force
+
+# ratio of number of transportation service workers / number of population
+income_2020$Transportation_Service_Worker_and_Population_Ratio <-
+  income_2020$Transportation_Services_Position / income_2020$Population
+
+# ratio of number of health care service workers / number of population
+income_2020$HealthCare_Service_Worker_and_Population_Ratio <- 
+  income_2020$Healthcare_Services_Position / income_2020$Population
+
+# Difference in individuals' median and average income
+income_2020$Difference_in_Individual_Median_Average_Income <- abs(income_2020$Individual_Average_Income - income_2020$Individual_Median_Income)
+
+# Remove the original columns
+income_2020 <- income_2020[, !names(income_2020) %in% c(
+  "Multiple-census-family households",
+  "One-census-family households without additional persons",
+  "Couple-family households",
+  "One-parent-family households",
+  "Multigenerational households",
+  "One-census-family households with additional persons",
+  "Two-or-more-person non-census-family households"
+)]
+
+# Extract the neighborhood columns from each dataset
+neighborhood_crime <- crime_2020$Neighbourhood
+neighborhood_income <- income_2020$Neighbourhood
+
+# Find the differences
+difference_crime_to_income <- setdiff(neighborhood_crime, neighborhood_income)
+difference_income_to_crime <- setdiff(neighborhood_income, neighborhood_crime)
+
+# Output the differences
+# print("Neighborhoods in crime dataset not present in income dataset:")
+# print(difference_crime_to_income)
+
+# print("Neighborhoods in income dataset not present in crime dataset:")
+# print(difference_income_to_crime)
+
+# Replace the values
+income_2020$Neighbourhood <- gsub("O`Connor Parkview", "O'Connor-Parkview", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Danforth-East York", "Danforth East York", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Taylor Massey", "Taylor-Massey", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("East End Danforth", "East End-Danforth", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Cabbagetown-South St. James Town", "Cabbagetown-South St.James Town", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("North St. James Town", "North St.James Town", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Yonge-St. Clair", "Yonge-St.Clair", income_2020$Neighbourhood)
+income2020 <- na.omit(income_2020)
+
+income2020 <- na.omit(income_2020)
+crime_2020 <- na.omit(crime_2020)
+merged_data <- merge(crime_2020, income_2020, by = "Neighbourhood", all.x = TRUE)
+```
+
+# Figure 1: 3D Scatter Plot: Robbery Count vs. Socio-Economic Indicators
+
+**Plotly**
+
+The relationship between Permanent_Job_and_Labour_Force_Ratio, Individual_Median_Average_Income and robbery count among neighbouhoods is shown in Figure 1: Toronto 158 Neighbourhoods' Robbery Count vs. Socioeconomic Indicators. There is a noticeable cluster at low individual median income, and surprisingly with a high permanent job labour force ratio.
+
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+robbery_count_by_neighbourhood <- merged_data %>%
+  group_by(Neighbourhood) %>%
+  summarise(robbery_count = sum(Robbery))
+
+# Merge robbery counts back to the main dataset
+merged_data_plot1 <- merge(merged_data, robbery_count_by_neighbourhood, by = "Neighbourhood")
+merged_data_plot1$`Robbery Count` <- merged_data_plot1$robbery_count
+
+# Create 3D scatterplot using Plotly with 7 custom colors in reversed order and labeled axes
+plot_ly(merged_data_plot1, 
+        x = ~Permanent_Job_and_Labour_Force_Ratio, 
+        y = ~Individual_Median_Income, 
+        z = ~`Robbery Count`,
+        color = ~`Robbery Count`,
+        colors = c('#FDE725', '#5DC863', '#21908C', '#3B528B', '#440154'),
+        cmin = min(merged_data_plot1$`Robbery Count`),
+        cmax = max(merged_data_plot1$`Robbery Count`),
+        text = ~paste("Neighbour:", Neighbourhood, 
+                      "<br>#P.J. / #L.F.:",
+                      round(Permanent_Job_and_Labour_Force_Ratio, 3), 
+                      "<br>Median Income:", Individual_Median_Income, 
+                      "<br>Robbery Count:", `Robbery Count`),
+        hoverinfo = "text",
+        type = "scatter3d",
+        mode = "markers") %>%
+  layout(title = "2020 Toronto Neighbourhoods' Robbery Count vs. Socioeconomic Indicators",
+    scene = list(
+    xaxis = list(title = 'Permanent Job and Labour Force Ratio'),
+    yaxis = list(title = 'Individ. Med. Income'),
+    zaxis = list(title = 'Robbery Count')))
+
+```
+
+
+
+# Figure 2: Boxplots with Facets: Robbery Count By Premises Type and Darkness
+
+**Plotly**
+
+The distribution of robbery counts by Premises_Type, categorized based on the presence of sunset, Darkness is shown in Figure 2: Robbery Counts by Premises Type and Darkness. We can see that the mean and variance of robbery count in darkness are clearly higher than those not in darkness, regardless of premises type. Additionally, the darkness group has more outliers and a higher robbery count than the other group. Looking through premises types, we can see that commercial and educational areas have much bigger ranges in robbery count for the 1st quartile and 3rd quantile in the darkness group. This may imply that people who appear in those areas may have a higher probability of being involved in a robbery crime during darkness compared to the other group.
+
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# Make a copy of the merged_data and convert Darkness to a factor
+merged_data_plot2 <- merged_data
+merged_data_plot2$Darkness <- as.logical(merged_data_plot2$Darkness)
+
+dark_data <- merged_data_plot2 %>% filter(Darkness == TRUE)
+bright_data <- merged_data_plot2 %>% filter(Darkness == FALSE)
+
+# Dark
+dark_robbery_count <- dark_data %>%
+  group_by(Neighbourhood) %>%
+  summarise(robbery_count = sum(Robbery))
+
+dark_data_with_count <- merge(dark_data, dark_robbery_count, by = "Neighbourhood")
+
+
+# Bright
+bright_robbery_count <- bright_data %>%
+  group_by(Neighbourhood) %>%
+  summarise(robbery_count = sum(Robbery))
+
+bright_data_with_count <- merge(bright_data, bright_robbery_count, by = "Neighbourhood")
+
+combined_data <- rbind(dark_data_with_count, bright_data_with_count)
+
+# Create box plots
+plot <- plot_ly(combined_data, x = ~Darkness, y = ~robbery_count, color = ~Premises_Type, type = "box",
+                text = ~paste("Neighbourhood:", Neighbourhood)) %>%
+  layout(title = "Robbery Counts by Premises Type and Darkness",
+         xaxis = list(title = "Darkness (Presence of Sunset)"),
+         yaxis = list(title = "Robbery Counts"),
+         boxmode = "group",
+         barmode = "group",
+         facet_col = ~Premises_Type)
+
+# Display the plot
+plot
+```
+
+
+# Figure 3: Line Plots with Facets: Robbery Count by Premises Time and Temporal Factors {.tabset}
+
+**Plotly**
+
+The changes in robbery counts in different Premises_Type across different Season, Month, Day_of_Week, and Hour of the day is shown in Figure 3. We can see that commercial and outdoor areas have higher counts than all other types of premises. 
+
+Regarding the season, the count of robbery increases sharply in winter, which is consistent with existing studies that show crime rates increase during national holidays like Christmas and New Year. 
+
+For the month, the count of robbery shows an increasing trend during the summer months, which also matches the conclusion of existing research suggesting a correlation between temperature and crime rates. 
+Regarding the day of the week, we can see that robbery counts increase during weekends and drop on weekdays. 
+
+For hours of the day, it is clear that the robbery count increases from the afternoon to midnight and decreases sharply at 2 AM, which aligns perfectly with my intuition in creating the Darkness variable.
+
+## Season
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# First, let's calculate the count of robberies for each premises type in each season
+robbery_count_by_premise_season <- merged_data %>%
+  group_by(Season, Premises_Type) %>%
+  summarise(robbery_count = sum(Robbery))
+
+# Merge robbery counts back to the main dataset
+merged_data_plot3_season <- merge(merged_data, robbery_count_by_premise_season, by = c("Season","Premises_Type"))
+merged_data_plot3_season$`Robbery Count` <- merged_data_plot3_season$robbery_count
+```
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# By season
+
+# Now, create the line plot
+plot31 <- plot_ly(merged_data_plot3_season, x = ~Season, y = ~`Robbery Count`, color = ~Premises_Type, type = 'scatter', mode = 'lines', 
+                marker = list(size = 8)) %>%
+  layout(title = "Robbery Count by Premises Type and Season",
+         xaxis = list(title = "Season"),
+         yaxis = list(title = "Robbery Count"),
+         showlegend = TRUE)
+
+# Print the plot
+plot31
+```
+
+## Month
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# - By month
+# First, let's calculate the count of robberies for each premises type in each season
+robbery_count_by_premise_month <- merged_data %>%
+  group_by(Month, Premises_Type) %>%
+  summarise(robbery_count = sum(Robbery))
+
+robbery_count_by_premise_month$Month <- as.factor(robbery_count_by_premise_month$Month)
+
+merged_data$Month <- as.factor(merged_data$Month)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot3_month <- merge(merged_data, robbery_count_by_premise_month, by =
+                                   c("Month","Premises_Type"))
+merged_data_plot3_month$`Robbery Count` <- merged_data_plot3_month$robbery_count
+
+merged_data_plot3_month <- merged_data_plot3_month %>%
+  arrange(Month)
+
+# Now, create the line plot
+plot32 <- plot_ly(merged_data_plot3_month, x = ~Month, y = ~`Robbery Count`, color = ~Premises_Type, type
+                  = 'scatter', mode = 'lines',  marker = list(size = 8)) %>%
+  layout(title = "Robbery Count by Premises Type and Month",
+         xaxis = list(title = "Month"),
+         yaxis = list(title = "Robbery Count"),
+         showlegend = TRUE)
+
+# Print the plot
+plot32
+```
+
+## Day of Week
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# First, let's calculate the count of robberies for each premises type in each season
+robbery_count_by_premise_day <- merged_data %>%
+  group_by(Day_Of_Week_Numeric, Premises_Type) %>%
+  summarise(robbery_count = sum(Robbery))
+
+robbery_count_by_premise_day$Day_Of_Week_Numeric <- as.factor(robbery_count_by_premise_day$Day_Of_Week_Numeric)
+
+merged_data$Day_Of_Week_Numeric <- as.factor(merged_data$Day_Of_Week_Numeric)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot3_day <- merge(merged_data, robbery_count_by_premise_day, by =
+                                   c("Day_Of_Week_Numeric","Premises_Type"))
+merged_data_plot3_day$`Robbery Count` <- merged_data_plot3_day$robbery_count
+
+merged_data_plot3_day <- merged_data_plot3_day %>%
+  arrange(Day_Of_Week_Numeric)
+
+# Now, create the line plot
+plot33 <- plot_ly(merged_data_plot3_day, x = ~Day_Of_Week_Numeric, y = ~`Robbery Count`, color = ~Premises_Type, type
+                  = 'scatter', mode = 'lines',  marker = list(size = 8)) %>%
+  layout(title = "Robbery Count by Premises Type and Day",
+         xaxis = list(title = "Day of Week"),
+         yaxis = list(title = "Robbery Count"),
+         showlegend = TRUE)
+
+# Print the plot
+plot33
+```
+## Hour of Day
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# - By Hour
+# First, let's calculate the count of robberies for each premises type in each season
+robbery_count_by_premise_hour <- merged_data %>%
+  group_by(Hour, Premises_Type) %>%
+  summarise(robbery_count = sum(Robbery))
+
+robbery_count_by_premise_hour$Hour <- as.factor(robbery_count_by_premise_hour$Hour)
+
+merged_data$Hour <- as.factor(merged_data$Hour)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot3_hour <- merge(merged_data, robbery_count_by_premise_hour, by =
+                                   c("Hour","Premises_Type"))
+merged_data_plot3_hour$`Robbery Count` <- merged_data_plot3_hour$robbery_count
+
+merged_data_plot3_hour <- merged_data_plot3_hour %>%
+  arrange(Hour)
+
+# Now, create the line plot
+plot34 <- plot_ly(merged_data_plot3_hour, x = ~Hour, y = ~`Robbery Count`, color = ~Premises_Type, type
+                  = 'scatter', mode = 'lines',  marker = list(size = 8)) %>%
+  layout(title = "Robbery Count by Premises Type and Hour of the Day",
+         xaxis = list(title = "Hour of the Day"),
+         yaxis = list(title = "Robbery Count"),
+         showlegend = TRUE)
+
+plot34
+```
+
+
+
+# Figure 4: Barplots with Facets: Total Crime Counts and Robbery Proportion by Temporal Factors {.tabset}
+
+**Plotly**
+
+The total crime counts and proportion of robbery crime across different seasons, months, days of the week, and hours of the day are shown in Figure 5. We can observe that not only do the total crime counts increase during holidays, weekends, and darkness, but also the proportion of robberies.
+
+## Season
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# - Season
+
+# Group merged_data by Season and calculate the sum of Robbery and total crimes
+crime_counts_by_season <- merged_data %>%
+  group_by(Season) %>%
+  summarise(total_crime_count = n(),
+            robbery_count = sum(Robbery))
+
+crime_counts_by_season$Season <- as.factor(crime_counts_by_season$Season)
+
+merged_data$Season <- as.factor(merged_data$Season)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot4_season <- merge(merged_data, crime_counts_by_season, by = "Season")
+merged_data_plot4_season$`Robbery Count` <- merged_data_plot4_season$robbery_count
+merged_data_plot4_season$`Total Crime Count` <- merged_data_plot4_season$total_crime_count
+
+# merged_data_plot4_season <- merged_data_plot4_season %>% arrange(Season)
+
+# Create a bar plot using plotly
+plot41 <- plot_ly(merged_data_plot4_season, x = ~Season, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+  add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
+  layout(title = "Total Crime Counts v.s. Robbery Counts by Season",
+         xaxis = list(title = "Season"),
+         yaxis = list(title = "Count"),
+         barmode = 'overlay')
+
+plot41
+```
+
+## Month
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# - Month
+
+# Group merged_data by Season and calculate the sum of Robbery and total crimes
+crime_counts_by_month <- merged_data %>%
+  group_by(Month) %>%
+  summarise(total_crime_count = n(),
+            robbery_count = sum(Robbery))
+
+crime_counts_by_month$Month <- as.factor(crime_counts_by_month$Month)
+
+merged_data$Month <- as.factor(merged_data$Month)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot4_month <- merge(merged_data, crime_counts_by_month, by = "Month")
+merged_data_plot4_month$`Robbery Count` <- merged_data_plot4_month$robbery_count
+merged_data_plot4_month$`Total Crime Count` <- merged_data_plot4_month$total_crime_count
+
+merged_data_plot4_month <- merged_data_plot4_month %>% arrange(Month)
+
+# Create a bar plot using plotly
+plot42 <- plot_ly(merged_data_plot4_month, x = ~Month, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+  add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
+  layout(title = "Total Crime Counts v.s. Robbery Counts by Month",
+         xaxis = list(title = "Month"),
+         yaxis = list(title = "Count"),
+         barmode = 'overlay')
+plot42
+```
+
+## Day of Week
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# - Day of Week
+# Group merged_data by Season and calculate the sum of Robbery and total crimes
+crime_counts_by_day <- merged_data %>%
+  group_by(Day_Of_Week_Numeric) %>%
+  summarise(total_crime_count = n(),
+            robbery_count = sum(Robbery))
+
+crime_counts_by_day$Day_Of_Week_Numeric <- as.factor(crime_counts_by_day$Day_Of_Week_Numeric)
+
+merged_data$Day_Of_Week_Numeric <- as.factor(merged_data$Day_Of_Week_Numeric)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot4_day <- merge(merged_data, crime_counts_by_day, by = "Day_Of_Week_Numeric")
+merged_data_plot4_day$`Robbery Count` <- merged_data_plot4_day$robbery_count
+merged_data_plot4_day$`Total Crime Count` <- merged_data_plot4_day$total_crime_count
+
+merged_data_plot4_day <- merged_data_plot4_day %>% arrange(Day_Of_Week_Numeric)
+
+# Create a bar plot using plotly
+plot43 <- plot_ly(merged_data_plot4_day, x = ~Day_Of_Week_Numeric, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+  add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
+  layout(title = "Total Crime Counts v.s. Robbery Counts by Day of Week",
+         xaxis = list(title = "Day of Week"),
+         yaxis = list(title = "Count"),
+         barmode = 'overlay')
+
+plot43
+```
+
+## Hour of Day
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+# - Hour
+# Group merged_data by Season and calculate the sum of Robbery and total crimes
+crime_counts_by_hour <- merged_data %>%
+  group_by(Hour) %>%
+  summarise(total_crime_count = n(),
+            robbery_count = sum(Robbery))
+
+crime_counts_by_hour$Hour <- as.factor(crime_counts_by_hour$Hour)
+
+merged_data$Hour <- as.factor(merged_data$Hour)
+
+# Merge robbery counts back to the main dataset
+merged_data_plot4_hour <- merge(merged_data, crime_counts_by_hour, by = "Hour")
+merged_data_plot4_hour$`Robbery Count` <- merged_data_plot4_hour$robbery_count
+merged_data_plot4_hour$`Total Crime Count` <- merged_data_plot4_hour$total_crime_count
+
+merged_data_plot4_hour <- merged_data_plot4_hour %>% arrange(Hour)
+
+# Create a bar plot using plotly
+plot44 <- plot_ly(merged_data_plot4_hour, x = ~Hour, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+  add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
+  layout(title = "Total Crime Counts v.s. Robbery Counts by Hour",
+         xaxis = list(title = "Hour"),
+         yaxis = list(title = "Count"),
+         barmode = 'overlay')
+
+plot44
+```
+
+
+# Figure 5: Interactive Map: Map of Toronto Robbery Crimes by Premises Type in 2020
+
+**Leaflet**
+
+The geographical distribution of robbery incidents across Toronto is shown in Figure 5. Each marker on the map represents a robbery incident, with color indicating the type of premises where the incident occurred. Popup information provided details such as neighborhood name, premises type, and population.
+
+We can observe clusters of robbery crimes on the map, as well as areas that do not have any reported robberies. This suggests that there may be a spatial influence on the probability and occurrence of robbery crimes.
+
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+robbery_data <- merged_data %>% filter(Robbery == TRUE)
+
+# Create leaflet map
+map <- leaflet(data = robbery_data) %>%
+  addTiles() %>%
+  setView(lng = -79.4, lat = 43.7, zoom = 10) # Adjust the coordinates and zoom level as needed
+
+color_palette <- colorFactor(palette = "Set1", domain = robbery_data$Premises_Type)
+
+# Define unique colors for premises types
+premises_colors <- unique(color_palette(robbery_data$Premises_Type))
+
+# Add markers colored by premises type
+map <- map %>% 
+  addCircleMarkers(lng = ~Longitude,
+                   lat = ~Latitude,
+                   radius = 5,
+                   color = ~color_palette(Premises_Type),
+                   fillColor = ~color_palette(Premises_Type),
+                   fillOpacity = 0.8,
+                   popup = ~paste("Neighbourhood: ", Neighbourhood, "<br>",
+                                  "Premises Type: ", Premises_Type, "<br>",
+                                  "Population: ", Population)) %>%
+  # Add legend
+  addLegend(position = "bottomright",
+            colors = premises_colors,
+            labels = unique(robbery_data$Premises_Type),
+            title = "Premises Type")
+
+
+# Print the map
+map
+
+```

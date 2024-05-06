@@ -1,0 +1,407 @@
+---
+title: "Statistical Model"
+output: 
+    html_document:
+        toc: TRUE
+        toc_float: TRUE
+---
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+library(dplyr)
+library(readxl)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(gridExtra)
+library(patchwork)
+library(pROC)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(gbm)
+library(caret)
+library(xgboost)
+library(plotly)
+library(leaflet)
+library(RColorBrewer)
+
+# URLs for the datasets
+urls <- c(
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Auto_Theft_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Bicycle_Thefts_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Break_and_Enter_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Homicides_Open_Data_(ASR-RC-TBL-002).csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Robbery_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Shooting_and_Firearm_Discharges_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Theft_Over_Open_Data.csv"
+)
+
+# Function to read and preprocess data
+read_and_process <- function(url) {
+  data <- read.csv(url)
+  return(data)
+} 
+
+# Read and preprocess all datasets
+datasets <- lapply(urls, read_and_process)
+
+# Combine datasets into one
+crime <- bind_rows(datasets, .id = "Dataset")
+
+# URL of the Excel file on GitHub
+github_url <- "https://github.com/KaiwenYangUT/Robbery_Crime_Classification/raw/main/data/Income_Dataset.xlsx"
+
+# File destination on your local machine
+local_file <- "Income_Dataset.xlsx"
+
+# Download the file from GitHub
+download.file(github_url, local_file, mode = "wb")
+
+# Read the Excel file
+income <- read_excel(local_file)
+
+# - Create a indicator variable Robbery
+crime <- crime %>%
+  mutate(Robbery = MCI_CATEGORY == "Robbery")
+
+
+# - Transform OCC_MONTH into int
+# Create new column OCC_Month_Numeric that transform chr OCC_MONTH into int.
+crime$OCC_Month_Numeric <- match(crime$OCC_MONTH, month.name)
+
+
+# - Create a new column Occurence_Time with the transformation of OCC_YEAR, OCC_MONTH, OCC_DAY and OCC_HOUR.
+crime$Occurrence_Time <- as.POSIXct(paste(crime$OCC_YEAR, crime$OCC_Month_Numeric, crime$OCC_DAY, crime$OCC_HOUR, sep="-"), format="%Y-%m-%d-%H")
+
+
+# - Convert Day of the Week to numeric representation
+crime$Day_Of_Week_Numeric <- match(weekdays(crime$Occurrence_Time), c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+
+# - Keep only necessary columns and rename them
+crime <- crime[, c("MCI_CATEGORY", "Robbery", "Occurrence_Time","OCC_YEAR", "OCC_Month_Numeric", "Day_Of_Week_Numeric", "OCC_HOUR", "NEIGHBOURHOOD_158", "LOCATION_TYPE", "PREMISES_TYPE", "LONG_WGS84", "LAT_WGS84")]
+colnames(crime) <- c("Crime_Category","Robbery", "Occurrence_Time", "Year", "Month", "Day_Of_Week_Numeric", "Hour", "Neighbourhood", "Location_Type", "Premises_Type", "Longitude", "Latitude")
+
+
+# - Create a new variable Season by grouping the month
+# Create Variable Season and Summary
+get_season <- function(month) {
+  if (month %in% c(3, 4, 5)) {
+    return("Spring")
+  } else if (month %in% c(6, 7, 8)) {
+    return("Summer")
+  } else if (month %in% c(9, 10, 11)) {
+    return("Fall")
+  } else {
+    return("Winter")
+  }
+}
+
+
+# Add a new column for season based on Month
+crime$Season <- sapply(crime$Month, get_season)
+
+
+# Define average sunset and sunrise times in Toronto (example times)
+average_sunset_time <- 18
+average_sunrise_time <- 6
+
+
+# Create the indicator variable
+crime$Darkness <- ifelse(crime$Hour >= average_sunset_time | crime$Hour < average_sunrise_time, 1, 0)
+
+
+# - Create new dataset crime_2020 by filtering crime happened in the year of 2020
+crime_2020 <- subset(crime, Year == 2020)
+
+
+# - Cleaning the dataset first by removing crime with non-recorded neighbourhood
+crime_2020 <- subset(crime_2020, Neighbourhood != "NSA")
+
+income_2020 <- income[, c("Neighbourhood Name",
+                          
+                        "Median total income in 2020  among recipients ($)",
+                        "Average total income in 2020 among recipients ($)", 
+                        
+                        "Number of persons in private households", 
+                        
+                        "One-census-family households without additional persons",
+                        "Couple-family households",
+                        "One-parent-family households",
+                        "Multigenerational households",
+                        "Multiple-census-family households",
+                        "One-census-family households with additional persons",
+                        "Two-or-more-person non-census-family households",
+                        "Median total income of two-or-more-person households in 2020 ($)",
+                        "Average total income of two-or-more-person households in 2020 ($)",
+
+                        "One-person households",
+                        "Median total income of one-person households in 2020 ($)",
+                        "Average total income of one-person households in 2020 ($)",
+                        
+                        "Average household size",
+                        "Median total income of household in 2020 ($)",
+                        "Average total income of household in 2020 ($)",
+                        
+                        "Total - Private households by tenure - 25% sample data",
+                        "Owner",
+                        "Renter",
+                        
+                        "Total - Labour force aged 15 years and over by class of worker including job permanency - 25% sample data",
+                        "Permanent position",
+                        "48-49 Transportation and warehousing",
+                        "62 Health care and social assistance")]
+
+colnames(income_2020) <- c("Neighbourhood", 
+                           
+                           "Individual_Median_Income", 
+                           "Individual_Average_Income",
+                           
+                           "Population",
+                           
+                           "One-census-family households without additional persons",
+                           "Couple-family households",
+                           "One-parent-family households",
+                           "Multigenerational households",
+                           "Multiple-census-family households",
+                           "One-census-family households with additional persons",
+                           "Two-or-more-person non-census-family households",
+                           "One+_people_Household_Median_Income",
+                           "One+_people_Household_Average_Income",
+                           
+                           "Number_of_One_person_Households",
+                           "One_Person_Household_Median_Income",
+                           "One_Person_Household_Average_Income",
+
+                           
+                           "Average_Household_Size",
+                           "Household_Median_Income",
+                           "Household_Average_Income",
+                           
+                           "Number_of_Private_Household_by_Tenure",
+                           "Number_of_Owner",
+                           "Number_of_Rental_Properties",
+                           
+                           "Total_Labour_Force",
+                           "Permanent_Job_Position",
+                           "Transportation_Services_Position", 
+                           "Healthcare_Services_Position")
+
+# Create the new column
+income_2020$Number_of_One_plus_people_Household_Median_Income <- rowSums(income_2020[, c(
+  "Multiple-census-family households", 
+  "One-census-family households without additional persons",
+  "Couple-family households",
+  "One-parent-family households",
+  "Multigenerational households",
+  "One-census-family households with additional persons",
+  "Two-or-more-person non-census-family households"
+)], na.rm = TRUE)
+
+# ratio of permanent job positions / total labour force
+income_2020$Permanent_Job_and_Labour_Force_Ratio <- 
+  income_2020$Permanent_Job_Position / income_2020$Total_Labour_Force
+
+# ratio of number of transportation service workers / number of population
+income_2020$Transportation_Service_Worker_and_Population_Ratio <-
+  income_2020$Transportation_Services_Position / income_2020$Population
+
+# ratio of number of health care service workers / number of population
+income_2020$HealthCare_Service_Worker_and_Population_Ratio <- 
+  income_2020$Healthcare_Services_Position / income_2020$Population
+
+# Difference in individuals' median and average income
+income_2020$Difference_in_Individual_Median_Average_Income <- abs(income_2020$Individual_Average_Income - income_2020$Individual_Median_Income)
+
+# Remove the original columns
+income_2020 <- income_2020[, !names(income_2020) %in% c(
+  "Multiple-census-family households",
+  "One-census-family households without additional persons",
+  "Couple-family households",
+  "One-parent-family households",
+  "Multigenerational households",
+  "One-census-family households with additional persons",
+  "Two-or-more-person non-census-family households"
+)]
+
+# Extract the neighborhood columns from each dataset
+neighborhood_crime <- crime_2020$Neighbourhood
+neighborhood_income <- income_2020$Neighbourhood
+
+# Find the differences
+difference_crime_to_income <- setdiff(neighborhood_crime, neighborhood_income)
+difference_income_to_crime <- setdiff(neighborhood_income, neighborhood_crime)
+
+# Output the differences
+# print("Neighborhoods in crime dataset not present in income dataset:")
+# print(difference_crime_to_income)
+
+# print("Neighborhoods in income dataset not present in crime dataset:")
+# print(difference_income_to_crime)
+
+# Replace the values
+income_2020$Neighbourhood <- gsub("O`Connor Parkview", "O'Connor-Parkview", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Danforth-East York", "Danforth East York", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Taylor Massey", "Taylor-Massey", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("East End Danforth", "East End-Danforth", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Cabbagetown-South St. James Town", "Cabbagetown-South St.James Town", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("North St. James Town", "North St.James Town", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Yonge-St. Clair", "Yonge-St.Clair", income_2020$Neighbourhood)
+income2020 <- na.omit(income_2020)
+
+income2020 <- na.omit(income_2020)
+crime_2020 <- na.omit(crime_2020)
+merged_data <- merge(crime_2020, income_2020, by = "Neighbourhood", all.x = TRUE)
+```
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+# Assigning values to variables
+glm_train_accuracy <- 0.8382214
+glm_test_accuracy <- 0.8324639
+glm_precision <- 0.6756757
+glm_recall <- 0.0294811
+glm_f1_score <- 0.0564972
+
+train_accuracy_tree <- 0.8417477
+test_accuracy_tree <- 0.8342697
+precision_tree <- 0.5916667
+recall_tree <- 0.0837264
+f1_score_tree <- 0.1466942
+
+train_accuracy_bag <- 0.9980218
+test_accuracy_bag <- 0.8733949
+precision_bag <- 0.6817420
+recall_bag <- 0.4799528
+f1_score_bag <- 0.5633218
+
+train_accuracy_rf <- 0.9973338
+test_accuracy_rf <- 0.8836276
+precision_rf <- 0.7723577
+recall_rf <- 0.4481132
+f1_score_rf <- 0.5671642
+
+boost_train_accuracy <- 0.8395975
+boost_test_accuracy <- 0.8338684
+boost_precision <- 0.7631579
+boost_recall <- 0.0341981
+boost_f1_score <- 0.0654628
+
+xgb_train_accuracy <- 0.8879333
+xgb_test_accuracy <- 0.8430979
+xgb_precision <- 0.5993976
+xgb_recall <- 0.2346698
+xgb_f1_score <- 0.3372881
+
+```
+
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+merged_data <- merged_data[, c("Neighbourhood", "Robbery", "Month", "Day_Of_Week_Numeric", "Hour",
+                               "Premises_Type", "Longitude", "Latitude", "Season", "Darkness",
+                               "Individual_Median_Income", "Individual_Average_Income", "Population",
+                               "Average_Household_Size", "Number_of_Rental_Properties",
+                               "Permanent_Job_and_Labour_Force_Ratio", 
+                               "Transportation_Service_Worker_and_Population_Ratio",
+                               "HealthCare_Service_Worker_and_Population_Ratio",
+                               "Difference_in_Individual_Median_Average_Income"
+)]
+  
+final_data <- subset(merged_data, select = -Neighbourhood)
+
+```
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+# Split data into training and testing sets
+set.seed(123)
+train_index <- sample(nrow(final_data), 0.7 * nrow(final_data))
+train_data <- final_data[train_index, ]
+test_data <- final_data[-train_index, ]
+
+train_data$Robbery <-as.factor(train_data$Robbery)
+test_data$Robbery <-as.factor(test_data$Robbery)
+```
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+# - Random Forest
+
+train_data_rf <- train_data
+test_data_rf <- test_data 
+
+train_data_rf$Robbery <-as.factor(train_data_rf$Robbery)
+test_data_rf$Robbery <-as.factor(test_data_rf$Robbery)
+```
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+# Fit the Random Forest model
+robbery_rf <- randomForest(
+  Robbery ~ .,
+  data = train_data_rf,
+  na.action = na.omit
+)
+```
+
+# Summary of Model Performance
+
+Each model underwent rigorous evaluation, including training accuracy, testing accuracy, precision, recall, and F1 score assessments, providing a comprehensive understanding of model performance. The performance scores are shown in the Performance Metrics of Different Models.
+
+In the table, Bagging has the highest training accuracy, and Random Forest has the second highest training accuracy, which is reasonable due to their design nature. Comparing test accuracy, we can see that both Random Forest and Bagging perform better than other models, achieving accuracies of 0.8836276 and 0.8733949, respectively.
+
+Upon examination of precision, recall, and F1 Score, it is evident that Random Forest and Bagging still exhibit better performance than other models. Random Forest demonstrates comparatively better performance in precision and F1 Score, while Bagging excels in recall. Although Bagging achieves a higher recall score than Random Forest, and recall is an important measure for identifying actual robbery cases, which aligns with our primary objective, Random Forest achieves much higher precision than Bagging, despite the difference in recall for both models. Since our goal is to help people avoid becoming victims of robbery, it is worth noting that higher precision may be more effective in reducing unnecessary panic, as precision measures the proportion of actual robberies among predicted robberies. Consequently, I selected Random Forest as the final model.
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+# Create a summary table
+summary_table <- data.frame(
+  Model = c("GLM", "Classification Tree", "Bagging", "Random Forest", "Boosting", "XGBoosting"),
+  Train_Accuracy = c(glm_train_accuracy, train_accuracy_tree, train_accuracy_bag, train_accuracy_rf, boost_train_accuracy, xgb_train_accuracy),
+  Test_Accuracy = c(glm_test_accuracy, test_accuracy_tree, test_accuracy_bag, test_accuracy_rf, boost_test_accuracy, xgb_test_accuracy),
+  Precision = c(glm_precision, precision_tree, precision_bag, precision_rf,boost_precision, xgb_precision),
+  Recall = c(glm_recall, recall_tree, recall_bag, recall_rf,boost_recall, xgb_recall),
+  F1_Score = c(glm_f1_score, f1_score_tree, f1_score_bag, f1_score_rf, boost_f1_score, xgb_f1_score)
+)
+
+# Print the summary table using kable
+kable(summary_table, align = c("l", rep("c", ncol(summary_table) - 1)), 
+      caption = "Performance Metrics of Different Models")
+
+```
+
+# Final Model and Variable Importance
+
+The variable importance of the fitted Random Forest model is shown in Figure 7 below. Spatial indicators such as Longitude, Latitude, and Premises_Type are ranked as the three most important variables in the model. Following spatial indicators, the second most important factors are temporal factors, including Hour, Month, Day_of_Week, and Season. Finally, we come to the socio-economic factors of neighborhoods, ranked in descending order of importance: Number_of_Rental_Properties, Permanent_Job_and_Labour_Force_Ratio, Transportation_Service_Worker_and_Population_Ratio, HealthCare_Service_Worker_and_Population_Ratio, and so on. It is worth noting that the newly created variable Difference_in_Individual_Median_Average_Income is ranked higher than both Individual_Median_Income and Individual_Average_Income, implying success in variable creation.
+
+```{r message=FALSE, echo=FALSE, warning=FALSE}
+vi <- importance(robbery_rf)[, "MeanDecreaseGini"]
+vi_sorted <- sort(vi, decreasing = TRUE)
+vi_df <- data.frame(Variable = names(vi_sorted), Importance = vi_sorted)
+
+# Create a named vector for renaming
+readable_names <- setNames(
+  c("Robbery", "Month", "Day of Week", "Hour", "Premises Type", "Longitude", 
+    "Latitude", "Season", "Darkness", "Median Individual Income", 
+    "Average Individual Income", "Population", "Average Household Size", 
+    "Number of Rental Properties", "Job and Labour Force Ratio", 
+    "Transportation Worker to Population Ratio", 
+    "Healthcare Worker to Population Ratio", 
+    "Difference in Median and Average Income"),
+  c("Robbery", "Month", "Day_Of_Week_Numeric", "Hour", "Premises_Type", 
+    "Longitude", "Latitude", "Season", "Darkness", 
+    "Individual_Median_Income", "Individual_Average_Income", "Population", 
+    "Average_Household_Size", "Number_of_Rental_Properties", 
+    "Permanent_Job_and_Labour_Force_Ratio", 
+    "Transportation_Service_Worker_and_Population_Ratio", 
+    "HealthCare_Service_Worker_and_Population_Ratio", 
+    "Difference_in_Individual_Median_Average_Income")
+)
+
+# Replace names in the data frame
+vi_df$Variable <- readable_names[vi_df$Variable]
+
+
+
+ggplot(vi_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Variable Importance", x = "Variables", y = "Importance") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
+
+```

@@ -1,0 +1,322 @@
+---
+title: "Table and Figure"
+output: 
+    html_document:
+        toc: TRUE
+        toc_float: TRUE
+---
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(gridExtra)
+library(patchwork)
+library(pROC)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(gbm)
+library(caret)
+library(xgboost)
+library(plotly)
+library(leaflet)
+
+# URLs for the datasets
+urls <- c(
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Auto_Theft_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Bicycle_Thefts_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Break_and_Enter_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Homicides_Open_Data_(ASR-RC-TBL-002).csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Robbery_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Shooting_and_Firearm_Discharges_Open_Data.csv",
+  "https://raw.githubusercontent.com/KaiwenYangUT/Robbery_Crime_Classification/main/data/Theft_Over_Open_Data.csv"
+)
+
+# Function to read and preprocess data
+read_and_process <- function(url) {
+  data <- read.csv(url)
+  return(data)
+} 
+
+# Read and preprocess all datasets
+datasets <- lapply(urls, read_and_process)
+
+# Combine datasets into one
+crime <- bind_rows(datasets, .id = "Dataset")
+
+# URL of the Excel file on GitHub
+github_url <- "https://github.com/KaiwenYangUT/Robbery_Crime_Classification/raw/main/data/Income_Dataset.xlsx"
+
+# File destination on your local machine
+local_file <- "Income_Dataset.xlsx"
+
+# Download the file from GitHub
+download.file(github_url, local_file, mode = "wb")
+
+# Read the Excel file
+income <- read_excel(local_file)
+
+# - Create a indicator variable Robbery
+crime <- crime %>%
+  mutate(Robbery = MCI_CATEGORY == "Robbery")
+
+
+# - Transform OCC_MONTH into int
+# Create new column OCC_Month_Numeric that transform chr OCC_MONTH into int.
+crime$OCC_Month_Numeric <- match(crime$OCC_MONTH, month.name)
+
+
+# - Create a new column Occurence_Time with the transformation of OCC_YEAR, OCC_MONTH, OCC_DAY and OCC_HOUR.
+crime$Occurrence_Time <- as.POSIXct(paste(crime$OCC_YEAR, crime$OCC_Month_Numeric, crime$OCC_DAY, crime$OCC_HOUR, sep="-"), format="%Y-%m-%d-%H")
+
+
+# - Convert Day of the Week to numeric representation
+crime$Day_Of_Week_Numeric <- match(weekdays(crime$Occurrence_Time), c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+
+
+# - Keep only necessary columns and rename them
+crime <- crime[, c("MCI_CATEGORY", "Robbery", "Occurrence_Time","OCC_YEAR", "OCC_Month_Numeric", "Day_Of_Week_Numeric", "OCC_HOUR", "NEIGHBOURHOOD_158", "LOCATION_TYPE", "PREMISES_TYPE", "LONG_WGS84", "LAT_WGS84")]
+colnames(crime) <- c("Crime_Category","Robbery", "Occurrence_Time", "Year", "Month", "Day_Of_Week_Numeric", "Hour", "Neighbourhood", "Location_Type", "Premises_Type", "Longitude", "Latitude")
+
+
+# - Create a new variable Season by grouping the month
+# Create Variable Season and Summary
+get_season <- function(month) {
+  if (month %in% c(3, 4, 5)) {
+    return("Spring")
+  } else if (month %in% c(6, 7, 8)) {
+    return("Summer")
+  } else if (month %in% c(9, 10, 11)) {
+    return("Fall")
+  } else {
+    return("Winter")
+  }
+}
+
+
+# Add a new column for season based on Month
+crime$Season <- sapply(crime$Month, get_season)
+
+
+# Define average sunset and sunrise times in Toronto (example times)
+average_sunset_time <- 18
+average_sunrise_time <- 6
+
+
+# Create the indicator variable
+crime$Darkness <- ifelse(crime$Hour >= average_sunset_time | crime$Hour < average_sunrise_time, 1, 0)
+
+
+# - Create new dataset crime_2020 by filtering crime happened in the year of 2020
+crime_2020 <- subset(crime, Year == 2020)
+
+
+# - Cleaning the dataset first by removing crime with non-recorded neighbourhood
+crime_2020 <- subset(crime_2020, Neighbourhood != "NSA")
+
+income_2020 <- income[, c("Neighbourhood Name",
+                          
+                        "Median total income in 2020  among recipients ($)",
+                        "Average total income in 2020 among recipients ($)", 
+                        
+                        "Number of persons in private households", 
+                        
+                        "One-census-family households without additional persons",
+                        "Couple-family households",
+                        "One-parent-family households",
+                        "Multigenerational households",
+                        "Multiple-census-family households",
+                        "One-census-family households with additional persons",
+                        "Two-or-more-person non-census-family households",
+                        "Median total income of two-or-more-person households in 2020 ($)",
+                        "Average total income of two-or-more-person households in 2020 ($)",
+
+                        "One-person households",
+                        "Median total income of one-person households in 2020 ($)",
+                        "Average total income of one-person households in 2020 ($)",
+                        
+                        "Average household size",
+                        "Median total income of household in 2020 ($)",
+                        "Average total income of household in 2020 ($)",
+                        
+                        "Total - Private households by tenure - 25% sample data",
+                        "Owner",
+                        "Renter",
+                        
+                        "Total - Labour force aged 15 years and over by class of worker including job permanency - 25% sample data",
+                        "Permanent position",
+                        "48-49 Transportation and warehousing",
+                        "62 Health care and social assistance")]
+
+colnames(income_2020) <- c("Neighbourhood", 
+                           
+                           "Individual_Median_Income", 
+                           "Individual_Average_Income",
+                           
+                           "Population",
+                           
+                           "One-census-family households without additional persons",
+                           "Couple-family households",
+                           "One-parent-family households",
+                           "Multigenerational households",
+                           "Multiple-census-family households",
+                           "One-census-family households with additional persons",
+                           "Two-or-more-person non-census-family households",
+                           "One+_people_Household_Median_Income",
+                           "One+_people_Household_Average_Income",
+                           
+                           "Number_of_One_person_Households",
+                           "One_Person_Household_Median_Income",
+                           "One_Person_Household_Average_Income",
+
+                           
+                           "Average_Household_Size",
+                           "Household_Median_Income",
+                           "Household_Average_Income",
+                           
+                           "Number_of_Private_Household_by_Tenure",
+                           "Number_of_Owner",
+                           "Number_of_Rental_Properties",
+                           
+                           "Total_Labour_Force",
+                           "Permanent_Job_Position",
+                           "Transportation_Services_Position", 
+                           "Healthcare_Services_Position")
+
+# Create the new column
+income_2020$Number_of_One_plus_people_Household_Median_Income <- rowSums(income_2020[, c(
+  "Multiple-census-family households", 
+  "One-census-family households without additional persons",
+  "Couple-family households",
+  "One-parent-family households",
+  "Multigenerational households",
+  "One-census-family households with additional persons",
+  "Two-or-more-person non-census-family households"
+)], na.rm = TRUE)
+
+# ratio of permanent job positions / total labour force
+income_2020$Permanent_Job_and_Labour_Force_Ratio <- 
+  income_2020$Permanent_Job_Position / income_2020$Total_Labour_Force
+
+# ratio of number of transportation service workers / number of population
+income_2020$Transportation_Service_Worker_and_Population_Ratio <-
+  income_2020$Transportation_Services_Position / income_2020$Population
+
+# ratio of number of health care service workers / number of population
+income_2020$HealthCare_Service_Worker_and_Population_Ratio <- 
+  income_2020$Healthcare_Services_Position / income_2020$Population
+
+# Difference in individuals' median and average income
+income_2020$Difference_in_Individual_Median_Average_Income <- abs(income_2020$Individual_Average_Income - income_2020$Individual_Median_Income)
+
+# Remove the original columns
+income_2020 <- income_2020[, !names(income_2020) %in% c(
+  "Multiple-census-family households",
+  "One-census-family households without additional persons",
+  "Couple-family households",
+  "One-parent-family households",
+  "Multigenerational households",
+  "One-census-family households with additional persons",
+  "Two-or-more-person non-census-family households"
+)]
+
+# Extract the neighborhood columns from each dataset
+neighborhood_crime <- crime_2020$Neighbourhood
+neighborhood_income <- income_2020$Neighbourhood
+
+# Find the differences
+difference_crime_to_income <- setdiff(neighborhood_crime, neighborhood_income)
+difference_income_to_crime <- setdiff(neighborhood_income, neighborhood_crime)
+
+# Output the differences
+# print("Neighborhoods in crime dataset not present in income dataset:")
+# print(difference_crime_to_income)
+
+# print("Neighborhoods in income dataset not present in crime dataset:")
+# print(difference_income_to_crime)
+
+# Replace the values
+income_2020$Neighbourhood <- gsub("O`Connor Parkview", "O'Connor-Parkview", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Danforth-East York", "Danforth East York", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Taylor Massey", "Taylor-Massey", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("East End Danforth", "East End-Danforth", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Cabbagetown-South St. James Town", "Cabbagetown-South St.James Town", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("North St. James Town", "North St.James Town", income_2020$Neighbourhood)
+income_2020$Neighbourhood <- gsub("Yonge-St. Clair", "Yonge-St.Clair", income_2020$Neighbourhood)
+income2020 <- na.omit(income_2020)
+
+income2020 <- na.omit(income_2020)
+crime_2020 <- na.omit(crime_2020)
+merged_data <- merge(crime_2020, income_2020, by = "Neighbourhood", all.x = TRUE)
+```
+
+# Continuous Numerical Variables
+```{r echo=FALSE}
+# Summary statistics for numerical variables
+numerical_summary <- summary(merged_data[, c("Longitude", "Latitude", 
+                                             "Population", "Average_Household_Size", "Number_of_Rental_Properties",
+                                             "Permanent_Job_and_Labour_Force_Ratio", 
+                                             "Transportation_Service_Worker_and_Population_Ratio", 
+                                             "HealthCare_Service_Worker_and_Population_Ratio", 
+                                             "Difference_in_Individual_Median_Average_Income")])
+
+# Define custom column names
+custom_column_names <- c("Longitude", "Latitude", 
+                         "Population", "Average Household Size", "Number of Rental Properties",
+                         "Permanent Job and Labour Force Ratio", 
+                         "Transportation Service Worker and Population Ratio", 
+                         "HealthCare Service Worker and Population Ratio", 
+                         "Difference in Individual Median Average Income")
+
+# Rename the columns of the summary table
+colnames(numerical_summary) <- custom_column_names
+
+# Load the kableExtra package
+library(kableExtra)
+
+# Print transposed summary table with custom column names and lines between rows and columns
+kable(t(numerical_summary), caption = "Summary statistics for numerical variables") %>%
+  kable_styling(latex_options = c("striped", "hold_position"),
+                full_width = TRUE)
+```
+
+The difference in individuals’ median and average income among neighborhoods varies significantly, with a minimum of 4320 and a maximum of 165600. Similarly, the population, average household size, number of rental properties, permanent job labor force ratio, and healthcare service worker population ratio show significant variation among different neighborhoods. The only feature that all neighborhoods share similar statistics for is the transportation service worker and population ratio, which appears to be guaranteed by the government to ensure transportation efficiency within society.
+
+
+
+# Discrete Numerical & Categorical Variables
+```{r echo=FALSE}
+p0 <- ggplot(merged_data, aes(x = Season)) + 
+  geom_bar() +
+  theme_minimal() +
+  labs(x = "Season") +
+  coord_flip() +
+  scale_y_continuous(breaks = seq(0, 6000, by = 2000))
+
+p1 <- ggplot(merged_data, aes(x = Month)) + 
+  geom_bar() +
+  theme_minimal() +
+  labs(x = "Month") +
+  coord_flip()
+
+p2 <- ggplot(merged_data, aes(x = Day_Of_Week_Numeric)) + 
+  geom_bar() +
+  theme_minimal() +
+  labs(x = "Day of Week") +
+  coord_flip()
+
+p3 <- ggplot(merged_data, aes(x = Hour)) + 
+  geom_bar() +
+  theme_minimal() +
+  labs(x = "Hour") +
+  coord_flip()
+
+
+grid.arrange(p0, p1, p2, p3, nrow = 1, top = "Bar Plots for Discrete Numerical and Categorical Variables")
+
+```
+
+Glancing from left to right, the Season is comparably evenly distributed, while the count of months is higher between January and March, and July and October. Saturday and Thursday have relatively higher counts compared to other days of the week, and there seems to be a normal distribution within the hour of the day, centered exactly at midnight, with the highest count of around 1250. The count of crime decreases from both 1 AM to 11 AM and from 1 PM to 11 PM, except for a jump in count at noon.
+

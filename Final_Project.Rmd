@@ -5,8 +5,28 @@ author: Kaiwen Yang
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-# Introduction
 ```
+
+# Load Library
+```{r message=FALSE, echo=FALSE, warning=FALSE, echo=FALSE}
+library(dplyr)
+library(readxl)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(gridExtra)
+library(patchwork)
+library(pROC)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(gbm)
+library(caret)
+library(xgboost)
+library(plotly)
+library(leaflet)
+```
+
 # 1. Read Data
 - Crime
 ```{r echo = FALSE, message=FALSE}
@@ -28,16 +48,13 @@ urls <- c(
 read_and_process <- function(url) {
   data <- read.csv(url)
   return(data)
-}
+} 
 
 # Read and preprocess all datasets
 datasets <- lapply(urls, read_and_process)
 
 # Combine datasets into one
 crime <- bind_rows(datasets, .id = "Dataset")
-```
-```{r}
-head(crime)
 ```
 
 - Census
@@ -354,8 +371,6 @@ grid.arrange(p0, p1, p2, p3, nrow = 1, top = "Bar Plots for Discrete Numerical a
 
 - Final Data: exclude Neighbourhood
 ```{r}
-# Assuming merged_data is your dataframe
-
 merged_data <- merged_data[, c("Neighbourhood", "Robbery", "Month", "Day_Of_Week_Numeric", "Hour",
                                "Premises_Type", "Longitude", "Latitude", "Season", "Darkness",
                                "Individual_Median_Income", "Individual_Average_Income", "Population",
@@ -369,10 +384,6 @@ merged_data <- merged_data[, c("Neighbourhood", "Robbery", "Month", "Day_Of_Week
 final_data <- subset(merged_data, select = -Neighbourhood)
 
 ```
-```{r}
-colnames(final_data)
-```
-
 
 # 3. Modelling
 - Train/Test Split
@@ -1146,13 +1157,13 @@ merged_data_plot4_season$`Total Crime Count` <- merged_data_plot4_season$total_c
 # merged_data_plot4_season <- merged_data_plot4_season %>% arrange(Season)
 
 # Create a bar plot using plotly
-plot_ly(merged_data_plot4_season, x = ~Season, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+plot41 <- plot_ly(merged_data_plot4_season, x = ~Season, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
   add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
   layout(title = "Total Crime Counts v.s. Robbery Counts by Season",
          xaxis = list(title = "Season"),
          yaxis = list(title = "Count"),
          barmode = 'overlay')
-
+plot41
 ```
 
 - Month
@@ -1179,13 +1190,13 @@ merged_data_plot4_month$`Total Crime Count` <- merged_data_plot4_month$total_cri
 merged_data_plot4_month <- merged_data_plot4_month %>% arrange(Month)
 
 # Create a bar plot using plotly
-plot_ly(merged_data_plot4_month, x = ~Month, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+plot42 <- plot_ly(merged_data_plot4_month, x = ~Month, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
   add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
   layout(title = "Total Crime Counts v.s. Robbery Counts by Month",
          xaxis = list(title = "Month"),
          yaxis = list(title = "Count"),
          barmode = 'overlay')
-
+plot42
 ```
 
 - Day of Week
@@ -1211,12 +1222,14 @@ merged_data_plot4_day$`Total Crime Count` <- merged_data_plot4_day$total_crime_c
 merged_data_plot4_day <- merged_data_plot4_day %>% arrange(Day_Of_Week_Numeric)
 
 # Create a bar plot using plotly
-plot_ly(merged_data_plot4_day, x = ~Day_Of_Week_Numeric, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+plot43 <- plot_ly(merged_data_plot4_day, x = ~Day_Of_Week_Numeric, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
   add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
   layout(title = "Total Crime Counts v.s. Robbery Counts by Day of Week",
          xaxis = list(title = "Day of Week"),
          yaxis = list(title = "Count"),
          barmode = 'overlay')
+
+plot43
 ```
 
 - Hour
@@ -1243,12 +1256,14 @@ merged_data_plot4_hour$`Total Crime Count` <- merged_data_plot4_hour$total_crime
 merged_data_plot4_hour <- merged_data_plot4_hour %>% arrange(Hour)
 
 # Create a bar plot using plotly
-plot_ly(merged_data_plot4_hour, x = ~Hour, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
+plot44 <- plot_ly(merged_data_plot4_hour, x = ~Hour, y = ~`Total Crime Count`, type = 'bar', name = 'Total Crime Count') %>%
   add_trace(y = ~`Robbery Count`, name = 'Robbery Count', opacity = 0.5, text = ~paste(round(`Robbery Count`/`Total Crime Count` * 100, 2), "%"), hoverinfo = "text") %>%
   layout(title = "Total Crime Counts v.s. Robbery Counts by Hour",
          xaxis = list(title = "Hour"),
          yaxis = list(title = "Count"),
          barmode = 'overlay')
+
+plot44
 ```
 
 # Fifth Plot:
@@ -1258,12 +1273,15 @@ robbery_data <- merged_data %>% filter(Robbery == TRUE)
 nrow(robbery_data)
 ```
 ```{r}
+library(RColorBrewer)
 # Create leaflet map
 map <- leaflet(data = robbery_data) %>%
   addTiles() %>%
   setView(lng = -79.4, lat = 43.7, zoom = 10) # Adjust the coordinates and zoom level as needed
 
 # Define unique colors for premises types
+color_palette <- colorFactor(palette = "Set1", domain = robbery_data$Premises_Type)
+
 premises_colors <- unique(color_palette(robbery_data$Premises_Type))
 
 # Add markers colored by premises type

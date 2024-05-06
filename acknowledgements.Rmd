@@ -1,0 +1,9 @@
+---
+title: "Acknowledgements"
+output: 
+    html_document
+---
+
+This project is conducted by Kaiwen Yang as part of the course JSC370H1: Data Science II, offered by the University of Toronto in Winter 2024, instructed by Professor Meredith Franklin, with teaching assistance from Jun Ni (Jenny) Du.
+
+In addition, I extend my sincere gratitude to Professor Meredith Franklin in the Department of Statistical Sciences and the School of the Environment at the University of Toronto for her invaluable supervision and support, which greatly contributed to the completion of this project.
