@@ -27,5 +27,12 @@ In addition, I extend my sincere gratitude to Professor Meredith Franklin in the
 
 **Project Website:** https://kaiwenyangut.github.io/Robbery_Crime_Classification/
 
-**Project Report:**: https://github.com/KaiwenYangUT/Robbery_Crime_Classification/blob/main/JSC370%20Final%20Project%20Report%20Kaiwen%20Yang.pdf
+**Project Report:**: https://github.com/KaiwenYangUT/Robbery_Crime_Classification/blob/main/docs/JSC370%20Final%20Project%20Report%20Kaiwen%20Yang.pdf
+
+## Deployment Note
+
+This project is configured as an R Markdown site with `output_dir: "docs"` in `_site.yml`.
+
+- For GitHub Pages, set the source to the `main` branch and `/docs` folder.
+- A root `index.html` redirect is included to forward to `docs/index.html` when root serving is used.
 
