@@ -9,7 +9,9 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+source("scripts/prepare_project_data.R")
 source("scripts/build_visual_widgets.R")
+project_data <- load_project_data(year = 2020)
 build_visual_widgets()
 
 widget_iframe <- function(file_name, height = 650) {
@@ -23,40 +25,64 @@ widget_iframe <- function(file_name, height = 650) {
 }
 ```
 
+<div class="hero-panel">
+<div class="hero-grid">
+<div class="hero-copy">
+<div class="hero-kicker">Interactive EDA</div>
+
+# Interactive Visualizations
+
+<p class="hero-lead">These views were rebuilt around comparison quality instead of novelty. The original page leaned on 3D perspective, repeated neighbourhood counts, and raw-volume comparisons that made the visual story weaker than the underlying data. The revised widgets emphasize robbery share, concentration, and context.</p>
+</div>
+
+<div class="hero-meta">
+<div class="stat-card">
+<span class="stat-value">77.0%</span>
+<p class="stat-label">robbery share in transit incidents, the highest among premise types</p>
+</div>
+<div class="stat-card">
+<span class="stat-value">22.7%</span>
+<p class="stat-label">peak monthly robbery share in February, versus 12.8% in June</p>
+</div>
+<div class="stat-card">
+<span class="stat-value">15:00</span>
+<p class="stat-label">hour with the highest robbery share across the retained incident set</p>
+</div>
+</div>
+</div>
+</div>
+
 The plots on this page are pre-rendered into standalone widget files in `docs/widgets`, and this page lazily embeds them for faster first-load performance.
 
-# Figure 1: 3D Scatter Plot: Robbery Count vs. Socio-Economic Indicators
+<div class="note-callout">
+Diagnostic summary: the simple <code>Darkness</code> split is not a strong overall discriminator in this data. Premise type, neighbourhood concentration, month, and hour explain more of the visible variation, so the revised visuals prioritize those dimensions.
+</div>
+
+# Figure 1: Neighbourhood Concentration of Robbery Risk
 
 **Plotly**
 
-The relationship between Permanent_Job_and_Labour_Force_Ratio, Individual_Median_Average_Income and robbery count among neighbouhoods is shown in Figure 1: Toronto 158 Neighbourhoods' Robbery Count vs. Socioeconomic Indicators. There is a noticeable cluster at low individual median income, and surprisingly with a high permanent job labour force ratio.
+The original 3D scatter plot made it difficult to compare neighbourhoods because perspective distortion and camera angle competed with the actual signal. This replacement shows median income on the x-axis, robbery share on the y-axis, rental concentration in bubble size, and robbery count in colour. The result is a clearer view of where robbery pressure is concentrated.
 
 ```{r fig1, results='asis'}
 cat(widget_iframe("figure1.html", 700))
 ```
 
-# Figure 2: Boxplots with Facets: Robbery Count By Premises Type and Darkness
+# Figure 2: Premise Type vs. Daylight and Dark-Hour Robbery Share
 
 **Plotly**
 
-The distribution of robbery counts by Premises_Type, categorized based on the presence of sunset, Darkness is shown in Figure 2: Robbery Counts by Premises Type and Darkness. We can see that the mean and variance of robbery count in darkness are clearly higher than those not in darkness, regardless of premises type. Additionally, the darkness group has more outliers and a higher robbery count than the other group. Looking through premises types, we can see that commercial and educational areas have much bigger ranges in robbery count for the 1st quartile and 3rd quantile in the darkness group. This may imply that people who appear in those areas may have a higher probability of being involved in a robbery crime during darkness compared to the other group.
+The original boxplots were analytically misleading because they repeated the same neighbourhood totals across many rows. The corrected view compares robbery share directly within each premise type. It shows that premise type is the dominant separator and that the day versus dark-hour gap is modest overall, with only a few premise types shifting materially.
 
 ```{r fig2, results='asis'}
 cat(widget_iframe("figure2.html", 700))
 ```
 
-# Figure 3: Line Plots with Facets: Robbery Count by Premises Time and Temporal Factors {.tabset}
+# Figure 3: Premise-Type Risk Across Time {.tabset}
 
 **Plotly**
 
-The changes in robbery counts in different Premises_Type across different Season, Month, Day_of_Week, and Hour of the day is shown in Figure 3. We can see that commercial and outdoor areas have higher counts than all other types of premises.
-
-Regarding the season, the count of robbery increases sharply in winter, which is consistent with existing studies that show crime rates increase during national holidays like Christmas and New Year.
-
-For the month, the count of robbery shows an increasing trend during the summer months, which also matches the conclusion of existing research suggesting a correlation between temperature and crime rates.
-Regarding the day of the week, we can see that robbery counts increase during weekends and drop on weekdays.
-
-For hours of the day, it is clear that the robbery count increases from the afternoon to midnight and decreases sharply at 2 AM, which aligns perfectly with my intuition in creating the Darkness variable.
+These charts now use robbery share instead of raw robbery count, which makes premise-to-premise comparisons more defensible. The hourly panel is shown as a heatmap because multiple line traces over 24 hours were too dense to parse quickly.
 
 ## Season
 ```{r fig3-season, results='asis'}
@@ -78,11 +104,11 @@ cat(widget_iframe("figure3_day.html", 650))
 cat(widget_iframe("figure3_hour.html", 650))
 ```
 
-# Figure 4: Barplots with Facets: Total Crime Counts and Robbery Proportion by Temporal Factors {.tabset}
+# Figure 4: Robberies Inside the Broader Incident Mix {.tabset}
 
 **Plotly**
 
-The total crime counts and proportion of robbery crime across different seasons, months, days of the week, and hours of the day are shown in Figure 5. We can observe that not only do the total crime counts increase during holidays, weekends, and darkness, but also the proportion of robberies.
+These overlays preserve the broader incident context by comparing all retained serious incidents against the robbery subset. They help distinguish periods with heavy activity from periods where robberies form an unusually large share of activity.
 
 ## Season
 ```{r fig4-season, results='asis'}
@@ -104,13 +130,11 @@ cat(widget_iframe("figure4_day.html", 650))
 cat(widget_iframe("figure4_hour.html", 650))
 ```
 
-# Figure 5: Interactive Map: Map of Toronto Robbery Crimes by Premises Type in 2020
+# Figure 5: Neighbourhood Robbery Burden Map
 
 **Leaflet**
 
-The geographical distribution of robbery incidents across Toronto is shown in Figure 5. Each marker on the map represents a robbery incident, with color indicating the type of premises where the incident occurred. Popup information provided details such as neighborhood name, premises type, and population.
-
-We can observe clusters of robbery crimes on the map, as well as areas that do not have any reported robberies. This suggests that there may be a spatial influence on the probability and occurrence of robbery crimes.
+Plotting every robbery incident as a point created downtown clutter and obscured neighbourhood-level interpretation. The revised map aggregates incidents to neighbourhood centroids, uses marker size for robbery count, and uses colour for robbery share, so concentration and relative burden are visible at the same time.
 
 ```{r fig5, results='asis'}
 cat(widget_iframe("figure5_map.html", 760))
