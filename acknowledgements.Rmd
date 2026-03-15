@@ -4,6 +4,18 @@ output:
     html_document
 ---
 
+<div class="hero-panel">
+<div class="hero-grid">
+<div class="hero-copy">
+<div class="hero-kicker">Acknowledgements</div>
+
+# Acknowledgements
+
+<p class="hero-lead">This project was completed as part of JSC370H1: Data Science II at the University of Toronto, with guidance from the course team and support from the Department of Statistical Sciences and the School of the Environment.</p>
+</div>
+</div>
+</div>
+
 This project is conducted by Kaiwen Yang as part of the course JSC370H1: Data Science II, offered by the University of Toronto in Winter 2024, instructed by Professor Meredith Franklin, with teaching assistance from Jun Ni (Jenny) Du.
 
 In addition, I extend my sincere gratitude to Professor Meredith Franklin in the Department of Statistical Sciences and the School of the Environment at the University of Toronto for her invaluable supervision and support, which greatly contributed to the completion of this project.

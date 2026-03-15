@@ -4,4 +4,16 @@ output:
     html_document
 ---
 
+<div class="hero-panel">
+<div class="hero-grid">
+<div class="hero-copy">
+<div class="hero-kicker">Project Report</div>
+
+# Download the Report
+
+<p class="hero-lead">The full written report summarizes the research question, data preparation, exploratory analysis, and modeling results for the robbery classification project.</p>
+</div>
+</div>
+</div>
+
 [Download the Report](JSC370 Final Project Report Kaiwen Yang.pdf){.btn .btn-primary}

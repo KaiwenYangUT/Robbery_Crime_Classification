@@ -254,6 +254,18 @@ crime_2020 <- na.omit(crime_2020)
 merged_data <- merge(crime_2020, income_2020, by = "Neighbourhood", all.x = TRUE)
 ```
 
+<div class="hero-panel">
+<div class="hero-grid">
+<div class="hero-copy">
+<div class="hero-kicker">Modeling</div>
+
+# Statistical Model
+
+<p class="hero-lead">This section compares several classification approaches for identifying robbery incidents using temporal, spatial, and neighbourhood-level predictors. The goal is to evaluate which models offer the strongest predictive performance and the clearest interpretation of robbery risk.</p>
+</div>
+</div>
+</div>
+
 ```{r message=FALSE, echo=FALSE, warning=FALSE}
 # Assigning values to variables
 glm_train_accuracy <- 0.8382214
