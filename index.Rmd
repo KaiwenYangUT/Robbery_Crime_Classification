@@ -26,11 +26,11 @@ project_data <- load_project_data(year = 2020)
 <div class="hero-meta">
 <div class="stat-card">
 <span class="stat-value">16,611</span>
-<p class="stat-label">incidents retained after merging 2020 crime records with neighbourhood context</p>
+<p class="stat-label">serious crime incidents analyzed across Toronto in 2020</p>
 </div>
 <div class="stat-card">
 <span class="stat-value">16.7%</span>
-<p class="stat-label">overall robbery share in the merged analytical dataset</p>
+<p class="stat-label">share of analyzed Toronto incidents that were robberies in 2020</p>
 </div>
 <div class="stat-card">
 <span class="stat-value">Moss Park</span>
@@ -65,7 +65,7 @@ Do temporal patterns, spatial context, and neighbourhood socio-economic conditio
 - Exploratory analysis: compare robbery share and robbery concentration across premise types, neighbourhoods, and time windows.
 - Predictive modeling: benchmark GLM, tree-based models, bagging, random forest, boosting, and XGBoost.
 
-# What the revised EDA shows
+# What the data shows
 
 <div class="cards-grid">
 <div class="insight-card">
@@ -74,7 +74,7 @@ Do temporal patterns, spatial context, and neighbourhood socio-economic conditio
 </div>
 <div class="insight-card">
 <h3>Premise type dominates</h3>
-<p>Transit, outdoor, commercial, and educational settings carry far higher robbery shares than houses and apartments. This is a stronger separator than the original visuals suggested.</p>
+<p>Transit, outdoor, commercial, and educational settings carry far higher robbery shares than houses and apartments. This makes location setting one of the clearest signals in the project.</p>
 </div>
 <div class="insight-card">
 <h3>Hour beats darkness</h3>
@@ -83,7 +83,7 @@ Do temporal patterns, spatial context, and neighbourhood socio-economic conditio
 </div>
 
 <div class="note-callout">
-The visualization page was rebuilt around robbery share rather than raw robbery count. That change matters because it avoids conflating high-activity settings with high-robbery-risk settings.
+The visualization page focuses on robbery share as well as robbery count, which helps separate high-activity settings from high-risk settings.
 </div>
 
 # Modeling Summary

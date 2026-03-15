@@ -32,7 +32,7 @@ widget_iframe <- function(file_name, height = 650) {
 
 # Interactive Visualizations
 
-<p class="hero-lead">These views were rebuilt around comparison quality instead of novelty. The original page leaned on 3D perspective, repeated neighbourhood counts, and raw-volume comparisons that made the visual story weaker than the underlying data. The revised widgets emphasize robbery share, concentration, and context.</p>
+<p class="hero-lead">These views are designed to make the main crime patterns easier to compare across neighbourhoods, premise types, and time windows. The emphasis is on robbery share, concentration, and context so the charts answer clearer public-facing questions about where and when robbery risk is highest.</p>
 </div>
 
 <div class="hero-meta">
@@ -46,7 +46,7 @@ widget_iframe <- function(file_name, height = 650) {
 </div>
 <div class="stat-card">
 <span class="stat-value">15:00</span>
-<p class="stat-label">hour with the highest robbery share across the retained incident set</p>
+<p class="stat-label">hour with the highest robbery share across the Toronto incidents analyzed here</p>
 </div>
 </div>
 </div>
@@ -55,14 +55,14 @@ widget_iframe <- function(file_name, height = 650) {
 The plots on this page are pre-rendered into standalone widget files in `docs/widgets`, and this page lazily embeds them for faster first-load performance.
 
 <div class="note-callout">
-Diagnostic summary: the simple <code>Darkness</code> split is not a strong overall discriminator in this data. Premise type, neighbourhood concentration, month, and hour explain more of the visible variation, so the revised visuals prioritize those dimensions.
+The simple <code>Darkness</code> split is not a strong overall separator in this dataset. Premise type, neighbourhood concentration, month, and hour explain more of the visible variation, so the charts focus on those dimensions.
 </div>
 
 # Figure 1: Neighbourhood Concentration of Robbery Risk
 
 **Plotly**
 
-The original 3D scatter plot made it difficult to compare neighbourhoods because perspective distortion and camera angle competed with the actual signal. This replacement shows median income on the x-axis, robbery share on the y-axis, rental concentration in bubble size, and robbery count in colour. The result is a clearer view of where robbery pressure is concentrated.
+This chart shows median income on the x-axis, robbery share on the y-axis, rental concentration in bubble size, and robbery count in colour. Together, those dimensions show where robbery pressure is most concentrated across Toronto neighbourhoods.
 
 ```{r fig1, results='asis'}
 cat(widget_iframe("figure1.html", 700))
@@ -72,7 +72,7 @@ cat(widget_iframe("figure1.html", 700))
 
 **Plotly**
 
-The original boxplots were analytically misleading because they repeated the same neighbourhood totals across many rows. The corrected view compares robbery share directly within each premise type. It shows that premise type is the dominant separator and that the day versus dark-hour gap is modest overall, with only a few premise types shifting materially.
+This view compares robbery share directly within each premise type. It shows that premise type is the dominant separator and that the day versus dark-hour gap is modest overall, with only a few premise types shifting materially.
 
 ```{r fig2, results='asis'}
 cat(widget_iframe("figure2.html", 700))
@@ -134,7 +134,7 @@ cat(widget_iframe("figure4_hour.html", 650))
 
 **Leaflet**
 
-Plotting every robbery incident as a point created downtown clutter and obscured neighbourhood-level interpretation. The revised map aggregates incidents to neighbourhood centroids, uses marker size for robbery count, and uses colour for robbery share, so concentration and relative burden are visible at the same time.
+This map aggregates incidents to neighbourhood centroids, uses marker size for robbery count, and uses colour for robbery share, so concentration and relative burden are visible at the same time.
 
 ```{r fig5, results='asis'}
 cat(widget_iframe("figure5_map.html", 760))

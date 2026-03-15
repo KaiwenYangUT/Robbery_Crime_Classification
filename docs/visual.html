@@ -373,11 +373,11 @@ Interactive EDA
 <div id="interactive-visualizations" class="section level1">
 <h1>Interactive Visualizations</h1>
 <p class="hero-lead">
-These views were rebuilt around comparison quality instead of novelty.
-The original page leaned on 3D perspective, repeated neighbourhood
-counts, and raw-volume comparisons that made the visual story weaker
-than the underlying data. The revised widgets emphasize robbery share,
-concentration, and context.
+These views are designed to make the main crime patterns easier to
+compare across neighbourhoods, premise types, and time windows. The
+emphasis is on robbery share, concentration, and context so the charts
+answer clearer public-facing questions about where and when robbery risk
+is highest.
 </p>
 </div>
 </div>
@@ -397,7 +397,8 @@ peak monthly robbery share in February, versus 12.8% in June
 <div class="stat-card">
 <span class="stat-value">15:00</span>
 <p class="stat-label">
-hour with the highest robbery share across the retained incident set
+hour with the highest robbery share across the Toronto incidents
+analyzed here
 </p>
 </div>
 </div>
@@ -407,21 +408,19 @@ hour with the highest robbery share across the retained incident set
 in <code>docs/widgets</code>, and this page lazily embeds them for
 faster first-load performance.</p>
 <div class="note-callout">
-<p>Diagnostic summary: the simple <code>Darkness</code> split is not a
-strong overall discriminator in this data. Premise type, neighbourhood
-concentration, month, and hour explain more of the visible variation, so
-the revised visuals prioritize those dimensions.</p>
+<p>The simple <code>Darkness</code> split is not a strong overall
+separator in this dataset. Premise type, neighbourhood concentration,
+month, and hour explain more of the visible variation, so the charts
+focus on those dimensions.</p>
 </div>
 <div id="figure-1-neighbourhood-concentration-of-robbery-risk"
 class="section level1">
 <h1>Figure 1: Neighbourhood Concentration of Robbery Risk</h1>
 <p><strong>Plotly</strong></p>
-<p>The original 3D scatter plot made it difficult to compare
-neighbourhoods because perspective distortion and camera angle competed
-with the actual signal. This replacement shows median income on the
-x-axis, robbery share on the y-axis, rental concentration in bubble
-size, and robbery count in colour. The result is a clearer view of where
-robbery pressure is concentrated.</p>
+<p>This chart shows median income on the x-axis, robbery share on the
+y-axis, rental concentration in bubble size, and robbery count in
+colour. Together, those dimensions show where robbery pressure is most
+concentrated across Toronto neighbourhoods.</p>
 <iframe src="widgets/figure1.html" style="width: 100%; height: 700px; border: none;" loading="lazy">
 </iframe>
 </div>
@@ -429,12 +428,10 @@ robbery pressure is concentrated.</p>
 class="section level1">
 <h1>Figure 2: Premise Type vs. Daylight and Dark-Hour Robbery Share</h1>
 <p><strong>Plotly</strong></p>
-<p>The original boxplots were analytically misleading because they
-repeated the same neighbourhood totals across many rows. The corrected
-view compares robbery share directly within each premise type. It shows
-that premise type is the dominant separator and that the day versus
-dark-hour gap is modest overall, with only a few premise types shifting
-materially.</p>
+<p>This view compares robbery share directly within each premise type.
+It shows that premise type is the dominant separator and that the day
+versus dark-hour gap is modest overall, with only a few premise types
+shifting materially.</p>
 <iframe src="widgets/figure2.html" style="width: 100%; height: 700px; border: none;" loading="lazy">
 </iframe>
 </div>
@@ -501,11 +498,9 @@ form an unusually large share of activity.</p>
 class="section level1">
 <h1>Figure 5: Neighbourhood Robbery Burden Map</h1>
 <p><strong>Leaflet</strong></p>
-<p>Plotting every robbery incident as a point created downtown clutter
-and obscured neighbourhood-level interpretation. The revised map
-aggregates incidents to neighbourhood centroids, uses marker size for
-robbery count, and uses colour for robbery share, so concentration and
-relative burden are visible at the same time.</p>
+<p>This map aggregates incidents to neighbourhood centroids, uses marker
+size for robbery count, and uses colour for robbery share, so
+concentration and relative burden are visible at the same time.</p>
 <iframe src="widgets/figure5_map.html" style="width: 100%; height: 760px; border: none;" loading="lazy">
 </iframe>
 </div>
