@@ -106,9 +106,9 @@ cat(widget_iframe("figure4_hour.html", 650))
 
 # Figure 5: Interactive Map: Map of Toronto Robbery Crimes by Premises Type in 2020
 
-**Plotly**
+**Leaflet**
 
-The geographical distribution of robbery incidents across Toronto is shown in Figure 5. Each marker on the map represents a small geographic grid of robbery incidents, with color indicating the type of premises where incidents occurred.
+The geographical distribution of robbery incidents across Toronto is shown in Figure 5. Each marker on the map represents a robbery incident, with color indicating the type of premises where the incident occurred. Popup information provided details such as neighborhood name, premises type, and population.
 
 We can observe clusters of robbery crimes on the map, as well as areas that do not have any reported robberies. This suggests that there may be a spatial influence on the probability and occurrence of robbery crimes.
 

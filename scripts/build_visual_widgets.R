@@ -2,6 +2,7 @@ suppressPackageStartupMessages({
   library(dplyr)
   library(readxl)
   library(plotly)
+  library(leaflet)
   library(htmlwidgets)
 })
 
@@ -210,25 +211,41 @@ build_visual_widgets <- function(output_dir = file.path("docs", "widgets")) {
     )
   save_widget(figure1, "figure1.html")
 
-  figure2_data <- merged_data %>%
-    group_by(Neighbourhood, Darkness, Premises_Type) %>%
-    summarise(robbery_count = sum(Robbery), .groups = "drop") %>%
-    mutate(Darkness = factor(ifelse(Darkness == 1, "Dark", "Light"), levels = c("Light", "Dark")))
+  merged_data_plot2 <- merged_data
+  merged_data_plot2$Darkness <- as.logical(merged_data_plot2$Darkness)
+
+  dark_data <- merged_data_plot2 %>% filter(Darkness == TRUE)
+  bright_data <- merged_data_plot2 %>% filter(Darkness == FALSE)
+
+  dark_robbery_count <- dark_data %>%
+    group_by(Neighbourhood) %>%
+    summarise(robbery_count = sum(Robbery), .groups = "drop")
+
+  dark_data_with_count <- merge(dark_data, dark_robbery_count, by = "Neighbourhood")
+
+  bright_robbery_count <- bright_data %>%
+    group_by(Neighbourhood) %>%
+    summarise(robbery_count = sum(Robbery), .groups = "drop")
+
+  bright_data_with_count <- merge(bright_data, bright_robbery_count, by = "Neighbourhood")
+
+  combined_data <- rbind(dark_data_with_count, bright_data_with_count)
 
   figure2 <- plot_ly(
-    figure2_data,
+    combined_data,
     x = ~Darkness,
     y = ~robbery_count,
     color = ~Premises_Type,
     type = "box",
-    text = ~paste("Neighbourhood:", Neighbourhood),
-    hoverinfo = "text+y+name"
+    text = ~paste("Neighbourhood:", Neighbourhood)
   ) %>%
     layout(
       title = "Robbery Counts by Premises Type and Darkness",
-      xaxis = list(title = "Darkness"),
+      xaxis = list(title = "Darkness (Presence of Sunset)"),
       yaxis = list(title = "Robbery Counts"),
-      boxmode = "group"
+      boxmode = "group",
+      barmode = "group",
+      facet_col = ~Premises_Type
     )
   save_widget(figure2, "figure2.html")
 
@@ -405,45 +422,37 @@ build_visual_widgets <- function(output_dir = file.path("docs", "widgets")) {
     "figure4_hour.html"
   )
 
-  robbery_data <- merged_data %>%
-    filter(Robbery == TRUE) %>%
-    mutate(
-      Latitude_Grid = round(Latitude, 3),
-      Longitude_Grid = round(Longitude, 3)
+  robbery_data <- merged_data %>% filter(Robbery == TRUE)
+
+  map <- leaflet(data = robbery_data) %>%
+    addTiles() %>%
+    setView(lng = -79.4, lat = 43.7, zoom = 10)
+
+  color_palette <- colorFactor(palette = "Set1", domain = robbery_data$Premises_Type)
+  premises_colors <- unique(color_palette(robbery_data$Premises_Type))
+
+  map <- map %>%
+    addCircleMarkers(
+      lng = ~Longitude,
+      lat = ~Latitude,
+      radius = 5,
+      color = ~color_palette(Premises_Type),
+      fillColor = ~color_palette(Premises_Type),
+      fillOpacity = 0.8,
+      popup = ~paste(
+        "Neighbourhood: ", Neighbourhood, "<br>",
+        "Premises Type: ", Premises_Type, "<br>",
+        "Population: ", Population
+      )
     ) %>%
-    group_by(Longitude_Grid, Latitude_Grid, Premises_Type) %>%
-    summarise(
-      incident_count = n(),
-      sample_neighbourhood = first(Neighbourhood),
-      .groups = "drop"
+    addLegend(
+      position = "bottomright",
+      colors = premises_colors,
+      labels = unique(robbery_data$Premises_Type),
+      title = "Premises Type"
     )
 
-  figure5 <- plot_ly(
-    robbery_data,
-    type = "scattermapbox",
-    lon = ~Longitude_Grid,
-    lat = ~Latitude_Grid,
-    color = ~Premises_Type,
-    size = ~incident_count,
-    sizes = c(6, 20),
-    text = ~paste(
-      "Neighbourhood:", sample_neighbourhood, "<br>",
-      "Premises Type:", Premises_Type, "<br>",
-      "Incident Count (grid):", incident_count
-    ),
-    hoverinfo = "text"
-  ) %>%
-    layout(
-      title = "Map of Toronto Robbery Crimes by Premises Type in 2020",
-      mapbox = list(
-        style = "open-street-map",
-        center = list(lon = -79.4, lat = 43.7),
-        zoom = 9.5
-      ),
-      margin = list(l = 0, r = 0, b = 0, t = 40),
-      legend = list(title = list(text = "Premises Type"))
-    )
-  save_widget(figure5, "figure5_map.html")
+  save_widget(map, "figure5_map.html")
 
   invisible(output_dir)
 }
