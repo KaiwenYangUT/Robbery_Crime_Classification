@@ -10,6 +10,7 @@ output:
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 suppressPackageStartupMessages({
   library(dplyr)
+  library(DT)
   library(plotly)
   library(tidyr)
 })
@@ -83,31 +84,38 @@ summary_table <- tibble(
     across(-Variable, ~ ifelse(abs(.) >= 1000, format(round(., 0), big.mark = ","), sprintf("%.3f", .)))
   )
 
-plot_ly(
-  type = "table",
-  columnwidth = c(270, 90, 95, 95, 95, 95, 95),
-  header = list(
-    values = names(summary_table),
-    align = c("left", rep("center", 6)),
-    fill = list(color = "#f0c7a5"),
-    font = list(color = "#1f1d1a", size = 14),
-    height = 34
-  ),
-  cells = list(
-    values = lapply(summary_table, as.character),
-    align = c("left", rep("center", 6)),
-    fill = list(color = list(rep(c("#fffaf2", "#f8f0e6"), length.out = nrow(summary_table)))),
-    font = list(color = "#2b2620", size = 13),
-    height = 38
+datatable(
+  summary_table,
+  rownames = FALSE,
+  class = "compact stripe hover",
+  options = list(
+    pageLength = 9,
+    dom = "tip",
+    autoWidth = TRUE,
+    scrollX = TRUE,
+    columnDefs = list(
+      list(width = "28%", targets = 0),
+      list(className = "dt-center", targets = 1:6)
+    )
   )
-)
+) %>%
+  formatStyle(
+    columns = names(summary_table),
+    backgroundColor = "#fffaf2",
+    color = "#2b2620",
+    borderColor = "rgba(31, 29, 26, 0.08)"
+  ) %>%
+  formatStyle(
+    0,
+    fontWeight = "600"
+  )
 ```
 
 <div class="note-callout">
 The largest spread appears in neighborhood population, rental property counts, and the difference between median and average income. Geographic coordinates vary within a narrower band, as expected for a single city.
 </div>
 
-# Discrete Numerical & Categorical Variables
+# Temporal and Categorical Distributions
 
 ```{r discrete-plots}
 season_counts <- merged_data %>%

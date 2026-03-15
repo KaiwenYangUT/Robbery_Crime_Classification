@@ -36,6 +36,8 @@ body {
 .navbar-default .navbar-nav > li > a:focus {
   color: var(--accent-deep) !important;
   background: rgba(240, 199, 165, 0.35) !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
 
 .navbar-default .navbar-nav > .active > a,
@@ -43,6 +45,17 @@ body {
 .navbar-default .navbar-nav > .active > a:focus {
   color: var(--ink) !important;
   background: rgba(240, 199, 165, 0.42) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.navbar-default .navbar-nav > li.active > a,
+.navbar-default .navbar-nav > li.active > a:hover,
+.navbar-default .navbar-nav > li.active > a:focus {
+  color: var(--ink) !important;
+  background: rgba(240, 199, 165, 0.42) !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
 
 h1, h2, h3, h4 {
@@ -161,6 +174,26 @@ a {
 
 table {
   background: rgba(255, 250, 242, 0.82);
+}
+
+table.dataTable {
+  border: 1px solid var(--line) !important;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+table.dataTable thead th {
+  background: #f0c7a5 !important;
+  color: var(--ink) !important;
+  border-bottom: 1px solid var(--line) !important;
+}
+
+.dataTables_wrapper {
+  background: rgba(255, 250, 242, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  padding: 1rem;
 }
 
 .note-callout {
