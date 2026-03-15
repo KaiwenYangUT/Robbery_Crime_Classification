@@ -27,5 +27,5 @@ In addition, I extend my sincere gratitude to Professor Meredith Franklin in the
 
 **Project Website:** https://kaiwenyangut.github.io/Robbery_Crime_Classification/
 
-**Project Report:**: https://github.com/KaiwenYangUT/Robbery_Crime_Classification/blob/main/JSC370%20Final%20Project%20Report%20Kaiwen%20Yang.pdf
+**Project Report:**: https://github.com/KaiwenYangUT/Robbery_Crime_Classification/blob/main/docs/JSC370%20Final%20Project%20Report%20Kaiwen%20Yang.pdf
 

@@ -50,7 +50,7 @@ crime <- bind_rows(datasets, .id = "Dataset")
 github_url <- "https://github.com/KaiwenYangUT/Robbery_Crime_Classification/raw/main/data/Income_Dataset.xlsx"
 
 # File destination on your local machine
-local_file <- "Income_Dataset.xlsx"
+local_file <- "data/Income_Dataset.xlsx"
 
 # Download the file from GitHub
 download.file(github_url, local_file, mode = "wb")
