@@ -58,6 +58,23 @@ body {
   box-shadow: none !important;
 }
 
+.navbar-default .navbar-toggle {
+  border-color: rgba(138, 52, 24, 0.38);
+  background: rgba(255, 248, 239, 0.96);
+}
+
+.navbar-default .navbar-toggle:hover,
+.navbar-default .navbar-toggle:focus {
+  background: rgba(240, 199, 165, 0.45);
+  border-color: rgba(138, 52, 24, 0.55);
+}
+
+.navbar-default .navbar-toggle .icon-bar {
+  background-color: var(--accent-deep);
+  height: 3px;
+  width: 24px;
+}
+
 h1, h2, h3, h4 {
   color: var(--ink);
   font-family: Georgia, "Iowan Old Style", serif;
